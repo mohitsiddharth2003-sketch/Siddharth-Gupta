@@ -1,0 +1,224 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "Registered accounting user profile linked to Firebase Auth UID",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "fullName": { "type": "string", "description": "Full name of the user", "maxLength": 100 },
+        "email": { "type": "string", "description": "Registered business email", "maxLength": 120 },
+        "phoneNumber": { "type": "string", "description": "Verified +91 mobile number", "maxLength": 20 },
+        "companyId": { "type": "string", "description": "Associated company identifier", "maxLength": 128 },
+        "companyName": { "type": "string", "description": "Company name", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["Admin", "Senior Accountant", "Tax Auditor", "Accountant"] },
+        "createdAt": { "type": "string", "description": "ISO timestamp of registration" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["uid", "fullName", "email", "phoneNumber", "companyId", "companyName", "role"]
+    },
+    "companyProfile": {
+      "title": "CompanyProfile",
+      "description": "Company entity profile and master GST / Bank settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Company document identifier" },
+        "name": { "type": "string", "description": "Company legal name", "maxLength": 150 },
+        "tradeName": { "type": "string", "description": "Trade or brand name", "maxLength": 150 },
+        "gstin": { "type": "string", "description": "15-digit GSTIN", "maxLength": 20 },
+        "pan": { "type": "string", "description": "10-digit PAN", "maxLength": 12 },
+        "ownerUid": { "type": "string", "description": "UID of company creator/owner" },
+        "address": { "type": "string", "description": "Registered principal place of business" },
+        "city": { "type": "string", "description": "City" },
+        "state": { "type": "string", "description": "State" },
+        "stateCode": { "type": "string", "description": "2-digit GST state code" },
+        "pincode": { "type": "string", "description": "6-digit PIN code" },
+        "phone": { "type": "string", "description": "Contact phone" },
+        "email": { "type": "string", "description": "Billing email" },
+        "bankName": { "type": "string", "description": "Primary bank name" },
+        "bankAccountNo": { "type": "string", "description": "Bank account number" },
+        "bankIfsc": { "type": "string", "description": "Bank IFSC code" },
+        "bankBranch": { "type": "string", "description": "Bank branch" },
+        "financialYear": { "type": "string", "description": "Financial year e.g. 2026-2027" },
+        "invoicePrefix": { "type": "string", "description": "Default tax invoice prefix" },
+        "invoiceNextNumber": { "type": "number", "description": "Next sequential invoice number" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["id", "name"]
+    },
+    "salesInvoice": {
+      "title": "SalesInvoice",
+      "description": "GST Tax Invoice or Credit Note record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique invoice identifier" },
+        "invoiceNumber": { "type": "string", "description": "Sequential GST invoice number" },
+        "invoiceType": { "type": "string", "enum": ["Tax Invoice", "Bill of Supply", "Credit Note", "Debit Note"] },
+        "date": { "type": "string", "description": "Invoice date YYYY-MM-DD" },
+        "dueDate": { "type": "string", "description": "Payment due date" },
+        "customerName": { "type": "string", "description": "Customer legal name" },
+        "customerGstin": { "type": "string", "description": "Customer GSTIN" },
+        "placeOfSupply": { "type": "string", "description": "State of supply" },
+        "supplyType": { "type": "string", "enum": ["Intra-State", "Inter-State"] },
+        "subtotal": { "type": "number", "description": "Taxable subtotal amount in INR" },
+        "cgst": { "type": "number", "description": "CGST amount" },
+        "sgst": { "type": "number", "description": "SGST amount" },
+        "igst": { "type": "number", "description": "IGST amount" },
+        "totalAmount": { "type": "number", "description": "Gross invoice amount" },
+        "status": { "type": "string", "enum": ["Paid", "Unpaid", "Partially Paid", "Overdue", "Cancelled"] },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "invoiceNumber", "totalAmount"]
+    },
+    "purchaseBill": {
+      "title": "PurchaseBill",
+      "description": "Inward supplier invoice with GST ITC eligibility",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique bill identifier" },
+        "vendorBillNumber": { "type": "string", "description": "Vendor bill invoice number" },
+        "vendorName": { "type": "string", "description": "Supplier name" },
+        "vendorGstin": { "type": "string", "description": "Supplier GSTIN" },
+        "billDate": { "type": "string", "description": "Bill date" },
+        "totalAmount": { "type": "number", "description": "Total bill amount" },
+        "itcEligibility": { "type": "string", "description": "Input Tax Credit eligibility status" },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "vendorBillNumber", "totalAmount"]
+    },
+    "party": {
+      "title": "Party",
+      "description": "Customer or Vendor Master Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique party identifier" },
+        "type": { "type": "string", "enum": ["Customer", "Vendor", "Both"] },
+        "name": { "type": "string", "description": "Party business name" },
+        "gstin": { "type": "string", "description": "Party GSTIN" },
+        "pan": { "type": "string", "description": "Party PAN" },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "name", "type"]
+    },
+    "expense": {
+      "title": "Expense",
+      "description": "Business expense voucher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Voucher identifier" },
+        "voucherNo": { "type": "string", "description": "Voucher number" },
+        "category": { "type": "string", "description": "Expense category" },
+        "amount": { "type": "number", "description": "Expense amount" },
+        "totalAmount": { "type": "number", "description": "Gross amount including tax" },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "voucherNo", "amount"]
+    },
+    "tdsRecord": {
+      "title": "TDSRecord",
+      "description": "Income Tax TDS deduction tracking under Chapter XVII-B",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique TDS record identifier" },
+        "section": { "type": "string", "description": "IT Act Section (194C, 194J, 194I, etc.)" },
+        "partyName": { "type": "string", "description": "Deductee name" },
+        "partyPan": { "type": "string", "description": "Deductee PAN" },
+        "paymentAmount": { "type": "number", "description": "Base taxable payment amount" },
+        "applicableRate": { "type": "number", "description": "TDS percentage rate" },
+        "tdsDeducted": { "type": "number", "description": "TDS amount deducted" },
+        "status": { "type": "string", "enum": ["Pending", "Deposited", "Challan Created", "Returned"] },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "section", "paymentAmount", "tdsDeducted"]
+    },
+    "bankStatementItem": {
+      "title": "BankStatementItem",
+      "description": "Bank transaction record for statement reconciliation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Bank transaction identifier" },
+        "date": { "type": "string", "description": "Transaction date" },
+        "description": { "type": "string", "description": "Bank statement narration" },
+        "withdrawal": { "type": "number", "description": "Debit amount" },
+        "deposit": { "type": "number", "description": "Credit amount" },
+        "balance": { "type": "number", "description": "Running balance" },
+        "matched": { "type": "boolean", "description": "Reconciliation status" },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "date", "description"]
+    },
+    "journalEntry": {
+      "title": "JournalEntry",
+      "description": "Double-entry general ledger voucher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Journal identifier" },
+        "voucherNo": { "type": "string", "description": "Journal voucher number" },
+        "date": { "type": "string", "description": "Voucher date" },
+        "debitAccount": { "type": "string", "description": "Debit ledger account" },
+        "creditAccount": { "type": "string", "description": "Credit ledger account" },
+        "amount": { "type": "number", "description": "Transaction amount in INR" },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "voucherNo", "amount"]
+    },
+    "auditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Tamper-evident accounting audit log entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Log identifier" },
+        "timestamp": { "type": "string", "description": "ISO timestamp" },
+        "action": { "type": "string", "description": "Action performed (CREATE, UPDATE, DELETE, RECONCILE)" },
+        "module": { "type": "string", "description": "Accounting module name" },
+        "recordId": { "type": "string", "description": "Target record ID" },
+        "details": { "type": "string", "description": "Audit description" },
+        "companyId": { "type": "string", "description": "Tenant company identifier" }
+      },
+      "required": ["id", "timestamp", "action", "module"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profile collection restricted to self (owner read/write)"
+    },
+    "/companies/{companyId}": {
+      "schema": "companyProfile",
+      "description": "Company profile collection accessible only by members/owner of that company"
+    },
+    "/companies/{companyId}/salesInvoices/{invoiceId}": {
+      "schema": "salesInvoice",
+      "description": "Company GST sales invoices and credit notes subcollection"
+    },
+    "/companies/{companyId}/purchaseBills/{billId}": {
+      "schema": "purchaseBill",
+      "description": "Company purchase bills and ITC records subcollection"
+    },
+    "/companies/{companyId}/parties/{partyId}": {
+      "schema": "party",
+      "description": "Company customers and vendors subcollection"
+    },
+    "/companies/{companyId}/expenses/{expenseId}": {
+      "schema": "expense",
+      "description": "Company expenses subcollection"
+    },
+    "/companies/{companyId}/tdsRecords/{tdsId}": {
+      "schema": "tdsRecord",
+      "description": "Company TDS deductions subcollection"
+    },
+    "/companies/{companyId}/bankItems/{bankItemId}": {
+      "schema": "bankStatementItem",
+      "description": "Company bank statement items subcollection"
+    },
+    "/companies/{companyId}/journals/{journalId}": {
+      "schema": "journalEntry",
+      "description": "Company journal entries subcollection"
+    },
+    "/companies/{companyId}/auditLogs/{logId}": {
+      "schema": "auditLogEntry",
+      "description": "Company audit trail subcollection"
+    }
+  }
+}

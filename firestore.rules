@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Default-deny everything unless explicitly permitted below
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User Profiles: Authenticated users manage their profile
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+
+    // Company Profiles and Multi-Tenant Subcollections
+    match /companies/{companyId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+
+      // 1. GST & Sales Invoices Subcollection
+      match /salesInvoices/{invoiceId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 2. Purchase Bills & ITC Subcollection
+      match /purchaseBills/{billId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 3. Parties (Customers & Vendors) Master Subcollection
+      match /parties/{partyId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 4. Business Expenses Subcollection
+      match /expenses/{expenseId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 5. TDS Records Subcollection (Chapter XVII-B)
+      match /tdsRecords/{tdsId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 6. Bank Statement Items Subcollection (Bank Reconciliation)
+      match /bankItems/{bankItemId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 7. General Ledger Journal Entries Subcollection
+      match /journals/{journalId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // 8. Audit Trail (Tamper-evident accounting audit log)
+      match /auditLogs/{logId} {
+        allow read, create: if isSignedIn();
+        allow update, delete: if false;
+      }
+    }
+  }
+}
