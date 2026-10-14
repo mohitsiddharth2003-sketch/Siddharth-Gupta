@@ -22,6 +22,7 @@ import {
   PurchaseStatus,
   UnitType,
   GSTRate,
+  GSTDetails,
 } from '../types/accounting';
 import {
   formatINR,
@@ -31,6 +32,7 @@ import {
 } from '../utils/indianFormatters';
 import { translations } from '../utils/translations';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { GSTINAutoFillField } from './GSTINAutoFillField';
 
 interface PurchaseBillsModuleProps {
   purchases: PurchaseBill[];
@@ -196,6 +198,35 @@ export const PurchaseBillsModule: React.FC<PurchaseBillsModuleProps> = ({
       vendorGstin: v.gstin || '',
       vendorState: v.state,
       vendorStateCode: v.stateCode,
+      isInterState: isInter,
+    }));
+
+    setItems((prev) => prev.map((item) => calculateItem(item, isInter)));
+  };
+
+  // Handle vendor GST auto-fill
+  const handleVendorGSTDetailsFetched = (details: GSTDetails) => {
+    const existing = vendors.find(
+      (v) => v.gstin && v.gstin.trim().toUpperCase() === details.gstin.trim().toUpperCase()
+    );
+
+    const isInter = isInterStateTransaction(company.stateCode, details.stateCode);
+
+    setFormData((prev) => ({
+      ...prev,
+      vendorId: existing ? existing.id : prev.vendorId || `vend_auto_${Date.now()}`,
+      vendorName: details.legalName || prev.vendorName,
+      vendorTradeName: details.tradeName || prev.vendorTradeName,
+      vendorGstin: details.gstin,
+      vendorAddress: details.address || prev.vendorAddress,
+      vendorCity: details.city || prev.vendorCity,
+      vendorDistrict: details.district || prev.vendorDistrict,
+      vendorPincode: details.pincode || prev.vendorPincode,
+      vendorGstStatus: details.gstStatus || prev.vendorGstStatus,
+      vendorTaxpayerType: details.taxpayerType || prev.vendorTaxpayerType,
+      vendorGstVerifiedAt: details.verifiedAt || new Date().toISOString(),
+      vendorState: details.state,
+      vendorStateCode: details.stateCode,
       isInterState: isInter,
     }));
 
@@ -627,37 +658,114 @@ export const PurchaseBillsModule: React.FC<PurchaseBillsModuleProps> = ({
                 </div>
               </div>
 
-              {/* Vendor Selector */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl border border-slate-200">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {t.purchases.vendor} *
-                  </label>
-                  <select
-                    value={formData.vendorId}
-                    onChange={(e) => handleVendorChange(e.target.value)}
-                    required
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
-                  >
-                    <option value="">-- Select Supplier / Vendor --</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name} ({v.state})
-                      </option>
-                    ))}
-                  </select>
+              {/* Supplier Details & GST Auto-Fill */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {t.purchases.vendor} (Select Saved Supplier)
+                    </label>
+                    <select
+                      value={formData.vendorId}
+                      onChange={(e) => handleVendorChange(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
+                    >
+                      <option value="">-- Select Saved Vendor (or Auto-Fill via GSTIN below) --</option>
+                      {vendors.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name} {v.gstin ? `(${v.gstin})` : `(${v.state})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Supplier Legal Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Supplier / Vendor Legal Business Name"
+                      value={formData.vendorName || ''}
+                      onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                {/* GSTIN Auto-Fill Field */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                  <GSTINAutoFillField
+                    gstin={formData.vendorGstin || ''}
+                    onChangeGstin={(g) => setFormData({ ...formData, vendorGstin: g })}
+                    onDetailsFetched={handleVendorGSTDetailsFetched}
+                    onFallbackExtracted={(ext) => {
+                      const isInter = isInterStateTransaction(company.stateCode, ext.stateCode);
+                      setFormData((prev) => ({
+                        ...prev,
+                        vendorStateCode: ext.stateCode,
+                        vendorState: ext.stateName || prev.vendorState,
+                        isInterState: isInter,
+                      }));
+                      setItems((prev) => prev.map((item) => calculateItem(item, isInter)));
+                    }}
+                    currentGstStatus={formData.vendorGstStatus}
+                    currentTaxpayerType={formData.vendorTaxpayerType}
+                    verifiedAt={formData.vendorGstVerifiedAt}
+                    language={language}
+                    label="Supplier GSTIN (15 Digits Auto-Fill)"
+                  />
+                </div>
+
+                {/* Review & Edit Supplier Details */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Supplier Trade / Brand Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.vendorTradeName || ''}
+                      onChange={(e) => setFormData({ ...formData, vendorTradeName: e.target.value })}
+                      placeholder="Brand or trade name"
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Supplier State & Code
+                    </label>
+                    <div className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-100/70 text-slate-700 font-medium">
+                      {formData.vendorStateCode ? `${formData.vendorStateCode} - ${formData.vendorState}` : 'Pending GSTIN or Selection'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      City / PIN
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.vendorCity ? `${formData.vendorCity}${formData.vendorPincode ? ` - ${formData.vendorPincode}` : ''}` : ''}
+                      onChange={(e) => setFormData({ ...formData, vendorCity: e.target.value })}
+                      placeholder="City and PIN code"
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Supplier GSTIN
+                    Principal Place of Business / Supplier Address
                   </label>
                   <input
                     type="text"
-                    value={formData.vendorGstin}
-                    onChange={(e) => setFormData({ ...formData, vendorGstin: e.target.value.toUpperCase() })}
-                    placeholder="27AAAAA0000A1Z5"
-                    className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    value={formData.vendorAddress || ''}
+                    onChange={(e) => setFormData({ ...formData, vendorAddress: e.target.value })}
+                    placeholder="Registered business address as per GST registry"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
                   />
                 </div>
               </div>

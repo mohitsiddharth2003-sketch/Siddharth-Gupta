@@ -551,6 +551,235 @@ async function startServer() {
     });
   });
 
+  // State code mapping for GST validation
+  const INDIAN_STATE_CODES: Record<string, string> = {
+    '01': 'Jammu & Kashmir',
+    '02': 'Himachal Pradesh',
+    '03': 'Punjab',
+    '04': 'Chandigarh',
+    '05': 'Uttarakhand',
+    '06': 'Haryana',
+    '07': 'Delhi',
+    '08': 'Rajasthan',
+    '09': 'Uttar Pradesh',
+    '10': 'Bihar',
+    '11': 'Sikkim',
+    '12': 'Arunachal Pradesh',
+    '13': 'Nagaland',
+    '14': 'Manipur',
+    '15': 'Mizoram',
+    '16': 'Tripura',
+    '17': 'Meghalaya',
+    '18': 'Assam',
+    '19': 'West Bengal',
+    '20': 'Jharkhand',
+    '21': 'Odisha',
+    '22': 'Chhattisgarh',
+    '23': 'Madhya Pradesh',
+    '24': 'Gujarat',
+    '26': 'Dadra & Nagar Haveli and Daman & Diu',
+    '27': 'Maharashtra',
+    '28': 'Andhra Pradesh (Old)',
+    '29': 'Karnataka',
+    '30': 'Goa',
+    '31': 'Lakshadweep',
+    '32': 'Kerala',
+    '33': 'Tamil Nadu',
+    '34': 'Puducherry',
+    '35': 'Andaman & Nicobar Islands',
+    '36': 'Telangana',
+    '37': 'Andhra Pradesh (New)',
+    '38': 'Ladakh',
+  };
+
+  // GST Verification Service Status
+  app.get('/api/gst/status', (req: Request, res: Response) => {
+    const apiKey = process.env.GST_API_KEY || process.env.GSTIN_API_KEY || process.env.SANDBOX_API_KEY;
+    const provider = process.env.GST_PROVIDER || 'sandbox';
+    return res.status(200).json({
+      success: true,
+      configured: Boolean(apiKey),
+      provider,
+      hasApiKey: Boolean(apiKey),
+      baseUrl: process.env.GST_API_BASE_URL || (provider === 'sandbox' ? 'https://api.sandbox.co.in/gsp/public/gstin' : 'Custom GSP Gateway'),
+      message: apiKey
+        ? `GST verification service is configured and active with provider: ${provider}`
+        : 'GST_API_KEY is not configured in server environment secrets. Manual entry and format validation active.',
+    });
+  });
+
+  // GST Verification Endpoint (supports both POST and GET)
+  const handleGstinVerify = async (req: Request, res: Response) => {
+    const rawGstin = (req.body?.gstin || req.params?.gstin || req.query?.gstin || '') as string;
+    const cleanGstin = String(rawGstin).trim().toUpperCase();
+
+    if (!cleanGstin) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_GSTIN',
+        message: 'GSTIN number is required.',
+      });
+    }
+
+    if (cleanGstin.length !== 15) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_LENGTH',
+        message: `GSTIN must be exactly 15 characters long (provided: ${cleanGstin.length} characters).`,
+      });
+    }
+
+    // 15-character GSTIN regex: 2 digits (state) + 5 letters + 4 digits + 1 letter (PAN) + 1 entity num + 'Z' + 1 checksum
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstinRegex.test(cleanGstin)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_GSTIN_FORMAT',
+        message: 'Invalid GSTIN structure. Statutory format: 27AAAAA0000A1Z5 (2-digit state code, 10-char PAN, 1 entity code, Z, 1 checksum).',
+      });
+    }
+
+    const stateCode = cleanGstin.substring(0, 2);
+    const stateName = INDIAN_STATE_CODES[stateCode];
+    if (!stateName) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_STATE_CODE',
+        message: `Invalid GST state code "${stateCode}". Must be a valid Indian state code between 01 and 38.`,
+      });
+    }
+
+    const pan = cleanGstin.substring(2, 12);
+    const apiKey = process.env.GST_API_KEY || process.env.GSTIN_API_KEY || process.env.SANDBOX_API_KEY;
+
+    // If credentials are NOT configured, report clear setup requirement and return extracted metadata for manual fallback
+    if (!apiKey) {
+      return res.status(200).json({
+        success: false,
+        configured: false,
+        error: 'API_CREDENTIALS_REQUIRED',
+        message: 'GST Verification API key (GST_API_KEY) is not configured in server environment secrets. Please enter verified details manually or configure your authorized GST API key.',
+        gstin: cleanGstin,
+        extracted: {
+          stateCode,
+          stateName,
+          pan,
+        },
+        setupRequired: {
+          envVar: 'GST_API_KEY',
+          provider: process.env.GST_PROVIDER || 'sandbox',
+          steps: [
+            '1. Register on Sandbox.co.in (https://sandbox.co.in) or an authorized GST Suvidha Provider (MasterGST, ClearTax).',
+            '2. Generate an API Key for "GST Public Search".',
+            '3. Set GST_API_KEY in server environment secrets.',
+            '4. Live government registry lookups will activate automatically.',
+          ],
+        },
+      });
+    }
+
+    // Call authorized provider API
+    try {
+      const provider = process.env.GST_PROVIDER || 'sandbox';
+      let targetUrl = process.env.GST_API_BASE_URL || `https://api.sandbox.co.in/gsp/public/gstin/${cleanGstin}`;
+      
+      const apiResponse = await fetch(targetUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: apiKey,
+          'x-api-key': apiKey,
+          'x-api-version': '1.0',
+          Accept: 'application/json',
+        },
+      });
+
+      if (apiResponse.status === 404) {
+        return res.status(404).json({
+          success: false,
+          error: 'NOT_FOUND',
+          message: `GSTIN "${cleanGstin}" was not found in the GST Registry records. Please verify the number.`,
+        });
+      }
+
+      if (apiResponse.status === 429) {
+        return res.status(429).json({
+          success: false,
+          error: 'RATE_LIMIT_EXCEEDED',
+          message: 'GST Verification API rate limit reached. Please wait a few moments before trying again.',
+        });
+      }
+
+      if (apiResponse.status === 401 || apiResponse.status === 403) {
+        return res.status(401).json({
+          success: false,
+          error: 'API_AUTH_FAILED',
+          message: 'GST verification API key is invalid or unauthorized. Please check your GST_API_KEY setting.',
+        });
+      }
+
+      if (!apiResponse.ok) {
+        return res.status(apiResponse.status).json({
+          success: false,
+          error: 'API_GATEWAY_ERROR',
+          message: `Official GST portal gateway error (${apiResponse.status}). Please try again later or enter details manually.`,
+        });
+      }
+
+      const resBody = await apiResponse.json() as any;
+      const data = resBody?.data || resBody;
+
+      // Extract and normalize official fields
+      const pradr = data?.pradr?.addr || data?.principalAddress || {};
+      const addressParts = [
+        pradr.bno,
+        pradr.bnm,
+        pradr.st,
+        pradr.loc,
+        pradr.city || pradr.dst,
+        pradr.stcd || stateName,
+        pradr.pncd,
+      ].filter(Boolean);
+
+      const normalizedAddress = addressParts.join(', ') || data?.address || `${stateName}, India`;
+      const normalizedStatus = (data?.sts || data?.status || 'Active').trim();
+      const isInactive = normalizedStatus.toLowerCase() !== 'active';
+
+      return res.status(200).json({
+        success: true,
+        configured: true,
+        data: {
+          gstin: cleanGstin,
+          legalName: data?.lgnm || data?.legalName || '',
+          tradeName: data?.tradeNam || data?.tradeName || data?.lgnm || '',
+          address: normalizedAddress,
+          state: stateName,
+          stateCode: stateCode,
+          city: pradr.city || pradr.dst || pradr.loc || '',
+          district: pradr.dst || '',
+          pincode: pradr.pncd || '',
+          pan: pan,
+          registrationDate: data?.rgdt || data?.registrationDate || '',
+          constitutionOfBusiness: data?.ctb || data?.constitutionOfBusiness || 'Business Entity',
+          gstStatus: normalizedStatus,
+          taxpayerType: data?.dty || data?.taxpayerType || 'Regular',
+          isInactive,
+          verifiedAt: new Date().toISOString(),
+        },
+      });
+    } catch (fetchErr: any) {
+      console.error('[GSTIN Verify] Error querying authorized GST provider:', fetchErr);
+      return res.status(502).json({
+        success: false,
+        error: 'NETWORK_FAILURE',
+        message: 'Failed to connect to the GST Verification provider. Network or gateway error.',
+      });
+    }
+  };
+
+  app.post('/api/gst/verify', handleGstinVerify);
+  app.get('/api/gst/verify/:gstin', handleGstinVerify);
+
+
   // Mount Vite development middlewares or serve static assets
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

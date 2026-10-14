@@ -23,6 +23,7 @@ import {
   SalesInvoice,
   PurchaseBill,
   Language,
+  GSTDetails,
 } from '../types/accounting';
 import {
   formatINR,
@@ -32,6 +33,7 @@ import {
 } from '../utils/indianFormatters';
 import { translations } from '../utils/translations';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { GSTINAutoFillField } from './GSTINAutoFillField';
 
 interface PartiesModuleProps {
   parties: Party[];
@@ -81,9 +83,46 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
     openingBalanceType: 'Dr',
     creditLimit: 0,
     notes: '',
+    district: '',
+    registrationDate: '',
+    constitutionOfBusiness: '',
+    gstStatus: '',
+    taxpayerType: '',
+    gstVerifiedAt: '',
   });
 
   const [formError, setFormError] = useState('');
+
+  // Handle auto-population when GST details are fetched from authorized API
+  const handleGSTDetailsFetched = (details: GSTDetails) => {
+    setFormData((prev) => ({
+      ...prev,
+      gstin: details.gstin,
+      name: details.legalName || prev.name,
+      tradeName: details.tradeName || prev.tradeName,
+      billingAddress: details.address || prev.billingAddress,
+      city: details.city || prev.city,
+      district: details.district || prev.district,
+      state: details.state || prev.state,
+      stateCode: details.stateCode || prev.stateCode,
+      pincode: details.pincode || prev.pincode,
+      pan: details.pan || prev.pan,
+      registrationDate: details.registrationDate || prev.registrationDate,
+      constitutionOfBusiness: details.constitutionOfBusiness || prev.constitutionOfBusiness,
+      gstStatus: details.gstStatus || prev.gstStatus,
+      taxpayerType: details.taxpayerType || prev.taxpayerType,
+      gstVerifiedAt: details.verifiedAt || new Date().toISOString(),
+    }));
+  };
+
+  const handleFallbackExtracted = (extracted: { stateCode: string; stateName?: string; pan: string }) => {
+    setFormData((prev) => ({
+      ...prev,
+      stateCode: extracted.stateCode,
+      state: extracted.stateName || prev.state,
+      pan: extracted.pan,
+    }));
+  };
 
   // GSTIN change handler with auto-fill of State & PAN
   const handleGstinChange = (input: string) => {
@@ -135,9 +174,15 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
       email: '',
       billingAddress: '',
       city: '',
+      district: '',
       state: 'Maharashtra',
       stateCode: '27',
       pincode: '',
+      registrationDate: '',
+      constitutionOfBusiness: '',
+      gstStatus: '',
+      taxpayerType: '',
+      gstVerifiedAt: '',
       openingBalance: 0,
       openingBalanceType: 'Dr',
       creditLimit: 0,
@@ -381,10 +426,38 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
                   <div className="space-y-1.5 text-xs text-slate-600 my-3 font-medium">
                     <div className="font-mono text-[11px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 flex items-center justify-between">
                       <span className="text-slate-400">GSTIN:</span>
-                      <span className="font-bold text-slate-800">
-                        {party.gstin || 'Unregistered (URP)'}
-                      </span>
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-bold text-slate-800">
+                          {party.gstin || 'Unregistered (URP)'}
+                        </span>
+                        {party.gstStatus && (
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                              party.gstStatus.toLowerCase() === 'active'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {party.gstStatus}
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    {(party.constitutionOfBusiness || party.taxpayerType) && (
+                      <div className="flex items-center space-x-1.5 text-[10px] text-slate-500">
+                        {party.constitutionOfBusiness && (
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-medium">
+                            {party.constitutionOfBusiness}
+                          </span>
+                        )}
+                        {party.taxpayerType && (
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-medium">
+                            {party.taxpayerType}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {party.phone && (
                       <div className="flex items-center space-x-2 text-slate-600">
@@ -535,22 +608,21 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
                 </div>
               </div>
 
-              {/* GSTIN & State Code Auto-sync */}
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      {t.parties.gstin} (15 Digits)
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={15}
-                      placeholder="e.g. 27AAACA9012K1ZP"
-                      value={formData.gstin}
-                      onChange={(e) => handleGstinChange(e.target.value)}
-                      className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
-                    />
-                  </div>
+              {/* GSTIN Verification & Auto-Fill Component */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <GSTINAutoFillField
+                  gstin={formData.gstin || ''}
+                  onChangeGstin={handleGstinChange}
+                  onDetailsFetched={handleGSTDetailsFetched}
+                  onFallbackExtracted={handleFallbackExtracted}
+                  currentGstStatus={formData.gstStatus}
+                  currentTaxpayerType={formData.taxpayerType}
+                  currentConstitution={formData.constitutionOfBusiness}
+                  verifiedAt={formData.gstVerifiedAt}
+                  language={language}
+                />
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
                       {t.parties.pan} (10 Digits)
@@ -564,9 +636,22 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
                       className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
                     />
                   </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Constitution of Business
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Private Limited, Proprietorship, LLP"
+                      value={formData.constitutionOfBusiness || ''}
+                      onChange={(e) => setFormData({ ...formData, constitutionOfBusiness: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
                       {t.parties.state} *
@@ -583,28 +668,75 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
                       ))}
                     </select>
                   </div>
+
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      City
+                      City / Locality
                     </label>
                     <input
                       type="text"
                       placeholder="e.g. Mumbai, Bengaluru"
-                      value={formData.city}
+                      value={formData.city || ''}
                       onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                       className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      PIN Code
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="e.g. 400001"
+                      value={formData.pincode || ''}
+                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                      className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      District
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="District"
+                      value={formData.district || ''}
+                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Taxpayer Type
+                    </label>
+                    <select
+                      value={formData.taxpayerType || 'Regular'}
+                      onChange={(e) => setFormData({ ...formData, taxpayerType: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium"
+                    >
+                      <option value="Regular">Regular Taxpayer</option>
+                      <option value="Composition">Composition Scheme</option>
+                      <option value="SEZ Unit">SEZ Unit</option>
+                      <option value="SEZ Developer">SEZ Developer</option>
+                      <option value="Casual">Casual Taxable Person</option>
+                    </select>
                   </div>
                 </div>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  {t.parties.billingAddress}
+                  {t.parties.billingAddress} (Principal Place of Business)
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Street address, building, industrial area..."
+                  placeholder="Street address, building, premises, locality..."
                   value={formData.billingAddress}
                   onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
                   className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 resize-none"

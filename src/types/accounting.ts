@@ -22,10 +22,34 @@ export interface CompanyProfile {
   invoiceNextNumber: number;
   reverseChargeDefault: boolean;
   termsAndConditions: string;
+  district?: string;
+  registrationDate?: string;
+  constitutionOfBusiness?: string;
+  gstStatus?: string;
+  taxpayerType?: string;
+  gstVerifiedAt?: string;
 }
 
 export type PartyType = 'Customer' | 'Vendor' | 'Both';
 export type BalanceType = 'Dr' | 'Cr';
+
+export interface GSTDetails {
+  gstin: string;
+  legalName: string;
+  tradeName?: string;
+  address: string;
+  state: string;
+  stateCode: string;
+  city?: string;
+  district?: string;
+  pincode?: string;
+  pan?: string;
+  registrationDate?: string;
+  constitutionOfBusiness?: string;
+  gstStatus?: 'Active' | 'Inactive' | 'Cancelled' | 'Suspended' | 'Pending' | string;
+  taxpayerType?: 'Regular' | 'Composition' | 'SEZ Unit' | 'SEZ Developer' | 'ISD' | 'Casual' | string;
+  verifiedAt?: string;
+}
 
 export interface Party {
   id: string;
@@ -41,6 +65,12 @@ export interface Party {
   state: string;
   stateCode: string;
   pincode?: string;
+  district?: string;
+  registrationDate?: string;
+  constitutionOfBusiness?: string;
+  gstStatus?: string;
+  taxpayerType?: string;
+  gstVerifiedAt?: string;
   openingBalance: number;
   openingBalanceType: BalanceType;
   creditLimit?: number;
@@ -92,9 +122,15 @@ export interface SalesInvoice {
   customerGstin?: string;
   customerPan?: string;
   customerPhone?: string;
+  customerTradeName?: string;
   customerState: string;
   customerStateCode: string;
   billingAddress: string;
+  customerPincode?: string;
+  customerDistrict?: string;
+  customerGstStatus?: string;
+  customerTaxpayerType?: string;
+  customerGstVerifiedAt?: string;
   placeOfSupply: string;
   placeOfSupplyCode: string;
   isInterState: boolean;
@@ -130,7 +166,15 @@ export interface PurchaseBill {
   dueDate: string;
   vendorId: string;
   vendorName: string;
+  vendorTradeName?: string;
   vendorGstin?: string;
+  vendorAddress?: string;
+  vendorCity?: string;
+  vendorDistrict?: string;
+  vendorPincode?: string;
+  vendorGstStatus?: string;
+  vendorTaxpayerType?: string;
+  vendorGstVerifiedAt?: string;
   vendorState: string;
   vendorStateCode: string;
   isInterState: boolean;

@@ -25,6 +25,7 @@ import {
   GSTRate,
   InvoiceStatus,
   PaymentRecord,
+  GSTDetails,
 } from '../types/accounting';
 import {
   formatINR,
@@ -36,6 +37,7 @@ import {
 import { translations } from '../utils/translations';
 import { InvoicePrintPreviewModal } from './InvoicePrintPreviewModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { GSTINAutoFillField } from './GSTINAutoFillField';
 
 interface SalesInvoiceModuleProps {
   sales: SalesInvoice[];
@@ -232,6 +234,37 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
     }));
 
     // Update items tax calculation with new inter-state status
+    setItems((prevItems) => prevItems.map((item) => calculateItem(item, isInter)));
+  };
+
+  // Handle GST auto-fill for customer in Sales Invoice
+  const handleCustomerGSTDetailsFetched = (details: GSTDetails) => {
+    const existing = customers.find(
+      (c) => c.gstin && c.gstin.trim().toUpperCase() === details.gstin.trim().toUpperCase()
+    );
+
+    const isInter = isInterStateTransaction(company.stateCode, details.stateCode);
+
+    setFormData((prev) => ({
+      ...prev,
+      customerId: existing ? existing.id : prev.customerId || `cust_auto_${Date.now()}`,
+      customerName: details.legalName || prev.customerName,
+      customerTradeName: details.tradeName || prev.customerTradeName,
+      customerGstin: details.gstin,
+      customerPan: details.pan || prev.customerPan,
+      customerState: details.state,
+      customerStateCode: details.stateCode,
+      billingAddress: details.address || prev.billingAddress,
+      customerPincode: details.pincode,
+      customerDistrict: details.district,
+      customerGstStatus: details.gstStatus,
+      customerTaxpayerType: details.taxpayerType,
+      customerGstVerifiedAt: details.verifiedAt || new Date().toISOString(),
+      placeOfSupply: details.state,
+      placeOfSupplyCode: details.stateCode,
+      isInterState: isInter,
+    }));
+
     setItems((prevItems) => prevItems.map((item) => calculateItem(item, isInter)));
   };
 
@@ -854,49 +887,117 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
                 </div>
               </div>
 
-              {/* Customer Details Selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 rounded-xl border border-slate-200">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {t.invoices.customer} *
-                  </label>
-                  <select
-                    value={formData.customerId}
-                    onChange={(e) => handleCustomerChange(e.target.value)}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
-                    required
-                  >
-                    <option value="">-- {language === 'hi' ? 'ग्राहक चुनें' : 'Select Customer'} --</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.gstin ? `(${c.gstin})` : '(Unregistered)'}
-                      </option>
-                    ))}
-                  </select>
+              {/* Customer Details & GST Auto-Fill */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      {t.invoices.customer} (Registered Client) *
+                    </label>
+                    <select
+                      value={formData.customerId}
+                      onChange={(e) => handleCustomerChange(e.target.value)}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
+                    >
+                      <option value="">-- {language === 'hi' ? 'ग्राहक चुनें (या नीचे जीएसटी खोजें)' : 'Select Existing Customer (or Auto-Fill via GSTIN below)'} --</option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.gstin ? `(${c.gstin})` : '(Unregistered)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Customer Legal Business Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.customerName || ''}
+                      onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                      placeholder="Legal Entity Name as registered with GST"
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-900"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {t.invoices.customerGstin}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.customerGstin}
-                    onChange={(e) => setFormData({ ...formData, customerGstin: e.target.value.toUpperCase() })}
-                    placeholder="27AAAAA0000A1Z5 or URP"
-                    className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                {/* GSTIN Auto-Fill Field */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                  <GSTINAutoFillField
+                    gstin={formData.customerGstin || ''}
+                    onChangeGstin={(g) => setFormData({ ...formData, customerGstin: g })}
+                    onDetailsFetched={handleCustomerGSTDetailsFetched}
+                    onFallbackExtracted={(ext) => {
+                      const isInter = isInterStateTransaction(company.stateCode, ext.stateCode);
+                      setFormData((prev) => ({
+                        ...prev,
+                        customerStateCode: ext.stateCode,
+                        customerState: ext.stateName || prev.customerState,
+                        customerPan: ext.pan,
+                        placeOfSupply: ext.stateName || prev.placeOfSupply,
+                        placeOfSupplyCode: ext.stateCode,
+                        isInterState: isInter,
+                      }));
+                      setItems((prevItems) => prevItems.map((item) => calculateItem(item, isInter)));
+                    }}
+                    currentGstStatus={formData.customerGstStatus}
+                    currentTaxpayerType={formData.customerTaxpayerType}
+                    verifiedAt={formData.customerGstVerifiedAt}
+                    language={language}
+                    label="Customer GSTIN (15 Digits Auto-Fill)"
                   />
                 </div>
 
+                {/* Review & Edit Customer Details */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Customer Trade Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.customerTradeName || ''}
+                      onChange={(e) => setFormData({ ...formData, customerTradeName: e.target.value })}
+                      placeholder="Brand or Trade Name"
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Income Tax PAN
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      value={formData.customerPan || ''}
+                      onChange={(e) => setFormData({ ...formData, customerPan: e.target.value.toUpperCase() })}
+                      placeholder="e.g. AAAAA0000A"
+                      className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Customer State & Code
+                    </label>
+                    <div className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-100/70 text-slate-700 font-medium">
+                      {formData.customerStateCode ? `${formData.customerStateCode} - ${formData.customerState}` : 'Pending GSTIN or Selection'}
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {language === 'hi' ? 'बिलिंग पता' : 'Billing Address'}
+                    {language === 'hi' ? 'बिलिंग पता' : 'Principal Place of Business / Registered Billing Address'}
                   </label>
                   <input
                     type="text"
-                    value={formData.billingAddress}
+                    value={formData.billingAddress || ''}
                     onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
-                    placeholder="Registered business address"
+                    placeholder="Principal Place of Business address as per GST registry"
                     className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
                   />
                 </div>
