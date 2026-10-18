@@ -35,10 +35,13 @@ import { BankReconciliationModule } from './components/BankReconciliationModule'
 import { LedgersModule } from './components/LedgersModule';
 import { ReportsModule } from './components/ReportsModule';
 import { SettingsModule } from './components/SettingsModule';
+import { WorkspaceModule } from './components/WorkspaceModule';
+import { SafeDataResetModal } from './components/SafeDataResetModal';
 import { translations } from './utils/translations';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { SystemAuditModal } from './components/SystemAuditModal';
 import { FirebaseSetupGuideModal } from './components/FirebaseSetupGuideModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -53,13 +56,22 @@ export default function App() {
   // Cloud sync indicator
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
-  // Initialize vault, test Firestore connection, and sync company data on startup
+  // Initialize vault, test Firestore connection, clean demo data and sync company data on startup
   useEffect(() => {
     AuthService.initVault();
     testFirestoreConnection();
 
     const activeCompanyId =
       localStorage.getItem('accountspro_active_company_id') || currentUser?.companyId || 'comp_01';
+    
+    // Ensure demo data is completely cleaned as requested
+    const cleanedKey = `accountspro_demo_cleaned_v3_${activeCompanyId}`;
+    if (!localStorage.getItem(cleanedKey)) {
+      AccountingService.clearDemoTransactionalData();
+      localStorage.setItem(cleanedKey, 'true');
+      refreshAllState();
+    }
+
     setIsCloudSyncing(true);
     AccountingService.syncWithFirestore(activeCompanyId)
       .then(() => {
@@ -89,6 +101,7 @@ export default function App() {
   const [isTdsModalOpen, setIsTdsModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isCloudGuideOpen, setIsCloudGuideOpen] = useState(false);
+  const [isSafeResetModalOpen, setIsSafeResetModalOpen] = useState(false);
   const [selectedLedgerPartyId, setSelectedLedgerPartyId] = useState<string | undefined>(undefined);
 
   // Toast feedback
@@ -110,6 +123,11 @@ export default function App() {
     setBankItems(AccountingService.getBankItems());
     setJournals(AccountingService.getJournals());
     setAuditLogs(AccountingService.getAuditLogs());
+  };
+
+  const handleSafeResetComplete = () => {
+    refreshAllState();
+    showToast('Demo transactional data safely purged. All transaction counts are now 0.', 'success');
   };
 
   // Login & Logout Handlers
@@ -326,6 +344,7 @@ export default function App() {
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
         onResetDemo={handleResetDemo}
+        onSafeReset={() => setIsSafeResetModalOpen(true)}
         onBackup={handleBackup}
         onOpenAudit={() => setIsAuditModalOpen(true)}
         onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
@@ -375,6 +394,7 @@ export default function App() {
                 setIsPartyModalOpen(true);
               }}
               onResetDemo={handleResetDemo}
+              onSafeReset={() => setIsSafeResetModalOpen(true)}
             />
           )}
 
@@ -491,6 +511,10 @@ export default function App() {
             />
           )}
 
+          {activeModule === 'workspace' && (
+            <WorkspaceModule companyName={company.name} />
+          )}
+
           {activeModule === 'settings' && (
             <SettingsModule
               company={company}
@@ -498,6 +522,7 @@ export default function App() {
               language={language}
               onUpdateCompany={handleUpdateCompany}
               onResetDemo={handleResetDemo}
+              onOpenSafeReset={() => setIsSafeResetModalOpen(true)}
               onBackup={handleBackup}
               onRestore={handleRestore}
             />
@@ -517,6 +542,13 @@ export default function App() {
         </div>
       )}
 
+      {/* Safe Data Reset Modal */}
+      <SafeDataResetModal
+        isOpen={isSafeResetModalOpen}
+        onClose={() => setIsSafeResetModalOpen(false)}
+        onResetComplete={handleSafeResetComplete}
+      />
+
       {/* System Audit & Verification Modal */}
       <SystemAuditModal
         isOpen={isAuditModalOpen}
@@ -530,6 +562,9 @@ export default function App() {
         onClose={() => setIsCloudGuideOpen(false)}
         language={language}
       />
+
+      {/* Offline Mode Status Banner (PWA Service Worker) */}
+      <OfflineIndicator />
     </div>
   );
 }

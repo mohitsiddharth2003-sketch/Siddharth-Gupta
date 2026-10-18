@@ -9,6 +9,9 @@ import {
   CreditCard,
   X,
   FileSpreadsheet,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   Expense,
@@ -92,6 +95,73 @@ export const ExpenseModule: React.FC<ExpenseModuleProps> = ({
   });
 
   const [formError, setFormError] = useState('');
+  const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    category: string;
+    reasoning: string;
+    rate: number;
+    itc: boolean;
+    confidence: string;
+  } | null>(null);
+
+  // Trigger Gemini AI Auto-Categorization
+  const handleAutoCategorize = async () => {
+    if (!formData.description?.trim()) {
+      setFormError('Please enter an expense description first to auto-categorize.');
+      return;
+    }
+
+    setFormError('');
+    setIsAutoCategorizing(true);
+    setAiSuggestion(null);
+
+    try {
+      const res = await fetch('/api/expenses/auto-categorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: formData.description.trim(),
+          paidTo: formData.paidTo?.trim(),
+          amount: formData.amount || 0,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Auto-categorize request failed');
+
+      const data = await res.json();
+      if (data.category) {
+        const gstRate = [0, 5, 12, 18, 28].includes(Number(data.suggestedGstRate))
+          ? (Number(data.suggestedGstRate) as GSTRate)
+          : 18;
+        const gstApplicable = gstRate > 0;
+        const itcClaimed = Boolean(data.itcEligible);
+
+        const calc = calculateTotal(formData.amount || 0, gstApplicable, gstRate);
+
+        setFormData((prev) => ({
+          ...prev,
+          category: data.category as ExpenseCategory,
+          gstRate,
+          gstApplicable,
+          itcClaimed,
+          ...calc,
+        }));
+
+        setAiSuggestion({
+          category: data.category,
+          reasoning: data.reasoning || `Classified as ${data.category}`,
+          rate: gstRate,
+          itc: itcClaimed,
+          confidence: data.confidence || 'High',
+        });
+      }
+    } catch (err: any) {
+      console.warn('[AI Categorize Error]:', err);
+      setFormError('AI Categorization service temporarily unavailable.');
+    } finally {
+      setIsAutoCategorizing(false);
+    }
+  };
 
   // Handle calculation when amount or gst changes
   const calculateTotal = (
@@ -480,17 +550,65 @@ export const ExpenseModule: React.FC<ExpenseModuleProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Expense Description *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">
+                    Expense Description *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAutoCategorize}
+                    disabled={isAutoCategorizing || !formData.description?.trim()}
+                    className="inline-flex items-center space-x-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 px-2.5 py-1 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                    title="Auto-assign ledger category and GST rate with Gemini AI"
+                  >
+                    {isAutoCategorizing ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>AI Analyzing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3 text-rose-600" />
+                        <span>Auto-Categorize with AI</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Monthly Broadband, Courier charges, Staff tea..."
+                  placeholder="e.g. Monthly Broadband, AWS Cloud hosting, Courier charges, Staff tea..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300"
                 />
+
+                {aiSuggestion && (
+                  <div className="mt-2 p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-950 text-[11px] flex items-start space-x-2 animate-in fade-in">
+                    <Sparkles className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="font-bold flex items-center justify-between">
+                        <span>AI Categorized: {aiSuggestion.category}</span>
+                        <span className="text-[10px] bg-purple-200 text-purple-900 px-1.5 py-0.2 rounded font-semibold">
+                          Confidence: {aiSuggestion.confidence}
+                        </span>
+                      </div>
+                      <p className="text-purple-800 text-[10px] mt-0.5">{aiSuggestion.reasoning}</p>
+                      <div className="flex items-center space-x-2 mt-1 text-[10px] font-semibold text-purple-900">
+                        <span>GST Rate: {aiSuggestion.rate}%</span>
+                        <span>•</span>
+                        <span>ITC: {aiSuggestion.itc ? 'Eligible' : 'Blocked / Exempt'}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAiSuggestion(null)}
+                      className="text-purple-400 hover:text-purple-700 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

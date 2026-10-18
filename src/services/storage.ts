@@ -50,7 +50,9 @@ export const INITIAL_COMPANY: CompanyProfile = {
     '1. Payment is strictly due within 15 days of invoice date.\n2. Overdue interest @18% p.a. will be levied after due date.\n3. Goods once sold will not be accepted back.\n4. Subject to Mumbai Jurisdiction only.',
 };
 
-export const INITIAL_PARTIES: Party[] = [
+export const INITIAL_PARTIES: Party[] = [];
+
+export const SAMPLE_DEMO_PARTIES: Party[] = [
   {
     id: 'party_cust_01',
     type: 'Customer',
@@ -150,7 +152,9 @@ export const INITIAL_PARTIES: Party[] = [
   },
 ];
 
-export const INITIAL_SALES: SalesInvoice[] = [
+export const INITIAL_SALES: SalesInvoice[] = [];
+
+export const SAMPLE_DEMO_SALES: SalesInvoice[] = [
   {
     id: 'inv_01',
     invoiceNumber: 'SGE/26-27/101',
@@ -355,7 +359,9 @@ export const INITIAL_SALES: SalesInvoice[] = [
   },
 ];
 
-export const INITIAL_PURCHASES: PurchaseBill[] = [
+export const INITIAL_PURCHASES: PurchaseBill[] = [];
+
+export const SAMPLE_DEMO_PURCHASES: PurchaseBill[] = [
   {
     id: 'pb_01',
     billNumber: 'PB/26-27/001',
@@ -452,7 +458,9 @@ export const INITIAL_PURCHASES: PurchaseBill[] = [
   },
 ];
 
-export const INITIAL_EXPENSES: Expense[] = [
+export const INITIAL_EXPENSES: Expense[] = [];
+
+export const SAMPLE_DEMO_EXPENSES: Expense[] = [
   {
     id: 'exp_01',
     voucherNo: 'EXP/26-27/001',
@@ -537,7 +545,9 @@ export const INITIAL_EXPENSES: Expense[] = [
   },
 ];
 
-export const INITIAL_TDS: TDSRecord[] = [
+export const INITIAL_TDS: TDSRecord[] = [];
+
+export const SAMPLE_DEMO_TDS: TDSRecord[] = [
   {
     id: 'tds_01',
     sectionCode: '194J_PROF',
@@ -604,7 +614,9 @@ export const INITIAL_TDS: TDSRecord[] = [
   },
 ];
 
-export const INITIAL_BANK_ITEMS: BankStatementItem[] = [
+export const INITIAL_BANK_ITEMS: BankStatementItem[] = [];
+
+export const SAMPLE_DEMO_BANK_ITEMS: BankStatementItem[] = [
   {
     id: 'bnk_01',
     date: '2026-04-02',
@@ -681,7 +693,9 @@ export const INITIAL_BANK_ITEMS: BankStatementItem[] = [
   },
 ];
 
-export const INITIAL_JOURNALS: JournalEntry[] = [
+export const INITIAL_JOURNALS: JournalEntry[] = [];
+
+export const SAMPLE_DEMO_JOURNALS: JournalEntry[] = [
   {
     id: 'jnl_01',
     voucherNo: 'JV/26-27/001',
@@ -751,8 +765,13 @@ function getStorage<T>(key: string, defaultValue: T): T {
   try {
     const scoped = getScopedKey(key);
     const raw = localStorage.getItem(scoped);
-    if (!raw) {
+    if (raw === null) {
       const activeCompanyId = localStorage.getItem('accountspro_active_company_id');
+      const isPurged = localStorage.getItem(`accountspro_demo_purged_${activeCompanyId || 'comp_01'}`) === 'true';
+      if (isPurged && Array.isArray(defaultValue)) {
+        localStorage.setItem(scoped, JSON.stringify([]));
+        return [] as unknown as T;
+      }
       if (activeCompanyId && activeCompanyId !== 'comp_01') {
         let initialVal: any = Array.isArray(defaultValue) ? [] : defaultValue;
         if (key === STORAGE_KEYS.COMPANY) {
@@ -1194,26 +1213,71 @@ export class AccountingService {
 
   static resetToDemoData(): void {
     const compId = this.getActiveCompanyId();
+    localStorage.removeItem(`accountspro_demo_purged_${compId}`);
     setStorage(STORAGE_KEYS.COMPANY, INITIAL_COMPANY);
-    setStorage(STORAGE_KEYS.PARTIES, INITIAL_PARTIES);
-    setStorage(STORAGE_KEYS.SALES, INITIAL_SALES);
-    setStorage(STORAGE_KEYS.PURCHASES, INITIAL_PURCHASES);
-    setStorage(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
-    setStorage(STORAGE_KEYS.TDS, INITIAL_TDS);
-    setStorage(STORAGE_KEYS.BANK_ITEMS, INITIAL_BANK_ITEMS);
-    setStorage(STORAGE_KEYS.JOURNALS, INITIAL_JOURNALS);
+    setStorage(STORAGE_KEYS.PARTIES, SAMPLE_DEMO_PARTIES);
+    setStorage(STORAGE_KEYS.SALES, SAMPLE_DEMO_SALES);
+    setStorage(STORAGE_KEYS.PURCHASES, SAMPLE_DEMO_PURCHASES);
+    setStorage(STORAGE_KEYS.EXPENSES, SAMPLE_DEMO_EXPENSES);
+    setStorage(STORAGE_KEYS.TDS, SAMPLE_DEMO_TDS);
+    setStorage(STORAGE_KEYS.BANK_ITEMS, SAMPLE_DEMO_BANK_ITEMS);
+    setStorage(STORAGE_KEYS.JOURNALS, SAMPLE_DEMO_JOURNALS);
     setStorage(STORAGE_KEYS.AUDIT_LOG, INITIAL_AUDIT_LOGS);
-    this.addAuditLog('RESTORE', 'System', 'demo_reset', 'Reset all accounting ledgers to initial Indian demo enterprise.');
+    this.addAuditLog('RESTORE', 'System', 'demo_reset', 'Loaded Indian demo enterprise sample records on demand.');
     FirestoreAccountingService.persistEntireBundle(compId, {
       company: INITIAL_COMPANY,
-      parties: INITIAL_PARTIES,
-      sales: INITIAL_SALES,
-      purchases: INITIAL_PURCHASES,
-      expenses: INITIAL_EXPENSES,
-      tdsRecords: INITIAL_TDS,
-      bankItems: INITIAL_BANK_ITEMS,
-      journals: INITIAL_JOURNALS,
+      parties: SAMPLE_DEMO_PARTIES,
+      sales: SAMPLE_DEMO_SALES,
+      purchases: SAMPLE_DEMO_PURCHASES,
+      expenses: SAMPLE_DEMO_EXPENSES,
+      tdsRecords: SAMPLE_DEMO_TDS,
+      bankItems: SAMPLE_DEMO_BANK_ITEMS,
+      journals: SAMPLE_DEMO_JOURNALS,
       auditLogs: INITIAL_AUDIT_LOGS,
+    }).catch(console.warn);
+  }
+
+  // Safe Data Reset: Completely clears transactional demo records while preserving company configuration, GSTIN, PAN, and system structure
+  static clearDemoTransactionalData(): void {
+    const compId = this.getActiveCompanyId();
+    localStorage.setItem(`accountspro_demo_purged_${compId}`, 'true');
+    
+    // Purge all transactional records
+    setStorage(STORAGE_KEYS.SALES, []);
+    setStorage(STORAGE_KEYS.PURCHASES, []);
+    setStorage(STORAGE_KEYS.EXPENSES, []);
+    setStorage(STORAGE_KEYS.PARTIES, []);
+    setStorage(STORAGE_KEYS.TDS, []);
+    setStorage(STORAGE_KEYS.BANK_ITEMS, []);
+    setStorage(STORAGE_KEYS.JOURNALS, []);
+    
+    // Preserve company profile, settings, GSTIN, PAN, Bank Details
+    const existingCompany = this.getCompany();
+    const updatedCompany: CompanyProfile = {
+      ...existingCompany,
+      invoiceNextNumber: 1, // Reset numbering counter for fresh start
+    };
+    setStorage(STORAGE_KEYS.COMPANY, updatedCompany);
+
+    // Record statutory audit event
+    this.addAuditLog(
+      'DELETE',
+      'System',
+      'safe_demo_purge',
+      'SAFE RESET COMPLETED: Cleared all demo sales invoices, purchase bills, expenses, parties, TDS records, bank reconciliation entries, and journals. System transaction counts reset to 0. Company profile and master configurations preserved.'
+    );
+
+    // Sync state with Firestore
+    FirestoreAccountingService.persistEntireBundle(compId, {
+      company: updatedCompany,
+      parties: [],
+      sales: [],
+      purchases: [],
+      expenses: [],
+      tdsRecords: [],
+      bankItems: [],
+      journals: [],
+      auditLogs: this.getAuditLogs(),
     }).catch(console.warn);
   }
 }

@@ -15,6 +15,8 @@ import {
   X,
   AlertCircle,
   FileText,
+  Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   Party,
@@ -34,6 +36,7 @@ import {
 import { translations } from '../utils/translations';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { GSTINAutoFillField } from './GSTINAutoFillField';
+import { fetchGSTDetails } from '../services/gstApi';
 
 interface PartiesModuleProps {
   parties: Party[];
@@ -92,6 +95,41 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
   });
 
   const [formError, setFormError] = useState('');
+  const [isVerifyingGstin, setIsVerifyingGstin] = useState(false);
+  const [gstVerificationMessage, setGstVerificationMessage] = useState<string | null>(null);
+  const [gstVerificationSuccess, setGstVerificationSuccess] = useState(false);
+
+  // Direct trigger function using fetchGSTDetails from src/services/gstApi.ts
+  const handleTriggerVerifyGSTIN = async () => {
+    const clean = (formData.gstin || '').trim().toUpperCase();
+    if (!clean || clean.length !== 15) {
+      setGstVerificationSuccess(false);
+      setGstVerificationMessage('Please enter a valid 15-character GSTIN (e.g. 27AABCS1429B1Z8) to verify.');
+      return;
+    }
+
+    setIsVerifyingGstin(true);
+    setGstVerificationMessage(null);
+
+    try {
+      const details = await fetchGSTDetails(clean);
+      if (details) {
+        handleGSTDetailsFetched(details);
+        setGstVerificationSuccess(true);
+        setGstVerificationMessage(
+          `GSTIN Verified! Auto-populated: ${details.legalName || clean} & Registered Address.`
+        );
+      } else {
+        setGstVerificationSuccess(false);
+        setGstVerificationMessage('Could not retrieve registration details for this GSTIN.');
+      }
+    } catch (err: any) {
+      setGstVerificationSuccess(false);
+      setGstVerificationMessage(err?.message || 'Verification request failed. Please check network or GSTIN format.');
+    } finally {
+      setIsVerifyingGstin(false);
+    }
+  };
 
   // Handle auto-population when GST details are fetched from authorized API
   const handleGSTDetailsFetched = (details: GSTDetails) => {
@@ -610,6 +648,50 @@ export const PartiesModule: React.FC<PartiesModuleProps> = ({
 
               {/* GSTIN Verification & Auto-Fill Component */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center space-x-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-slate-800 text-xs">GST Registration Lookup</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isVerifyingGstin || !formData.gstin || formData.gstin.trim().length !== 15}
+                    onClick={handleTriggerVerifyGSTIN}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed shadow-xs cursor-pointer transition-colors"
+                  >
+                    {isVerifyingGstin ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Verify GSTIN</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {gstVerificationMessage && (
+                  <div
+                    className={`p-2.5 rounded-xl text-xs font-medium flex items-center justify-between ${
+                      gstVerificationSuccess
+                        ? 'bg-emerald-100/80 text-emerald-900 border border-emerald-300'
+                        : 'bg-amber-100/80 text-amber-900 border border-amber-300'
+                    }`}
+                  >
+                    <span>{gstVerificationMessage}</span>
+                    <button
+                      type="button"
+                      onClick={() => setGstVerificationMessage(null)}
+                      className="text-xs font-bold ml-2 opacity-60 hover:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
                 <GSTINAutoFillField
                   gstin={formData.gstin || ''}
                   onChangeGstin={handleGstinChange}

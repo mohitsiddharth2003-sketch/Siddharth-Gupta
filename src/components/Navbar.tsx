@@ -15,10 +15,12 @@ import {
   Lock,
   Database,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { Language, CompanyProfile } from '../types/accounting';
 import { AuthSession } from '../types/auth';
 import { translations } from '../utils/translations';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   language: Language;
@@ -29,6 +31,7 @@ interface NavbarProps {
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
   onResetDemo: () => void;
+  onSafeReset?: () => void;
   onBackup: () => void;
   onOpenAudit: () => void;
   onOpenCloudGuide?: () => void;
@@ -44,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   mobileMenuOpen,
   setMobileMenuOpen,
   onResetDemo,
+  onSafeReset,
   onBackup,
   onOpenAudit,
   onOpenCloudGuide,
@@ -117,6 +121,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* Cloud SQL PostgreSQL Database Indicator */}
+            <div
+              title="Cloud SQL PostgreSQL Database: ai-studio-4b506324 in asia-south1"
+              className="hidden xl:inline-flex items-center px-2 py-1 text-[11px] font-semibold rounded-lg text-indigo-800 bg-indigo-50 border border-indigo-200"
+            >
+              <Database className="w-3 h-3 mr-1 text-indigo-600" />
+              <span>Cloud SQL</span>
+            </div>
+
             {/* Cloud Firestore Persistent Storage Status */}
             <div
               title="Cloud Firestore Production Database: Multi-tenant isolated, persistent storage"
@@ -149,6 +162,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Download className="w-3.5 h-3.5 sm:mr-1 text-slate-600" />
               <span className="hidden sm:inline">{t.common.backupData.split(' ')[0]}</span>
             </button>
+
+            {/* Safe Data Reset Button */}
+            {onSafeReset && (
+              <button
+                onClick={onSafeReset}
+                title="Safe Data Reset: Purge demo transactions to 0 while keeping company structure"
+                className="hidden sm:inline-flex items-center px-2.5 py-1.5 text-xs font-semibold rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5 sm:mr-1 text-rose-600" />
+                <span className="hidden md:inline">Reset Data (0)</span>
+              </button>
+            )}
+
+            {/* PWA Install Button */}
+            <PWAInstallButton />
 
             {/* Language Switcher */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">

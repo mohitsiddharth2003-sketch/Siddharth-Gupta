@@ -11,6 +11,7 @@ import {
   Clock,
   Search,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import {
   CompanyProfile,
@@ -26,6 +27,7 @@ interface SettingsModuleProps {
   language: Language;
   onUpdateCompany: (comp: CompanyProfile) => void;
   onResetDemo: () => void;
+  onOpenSafeReset?: () => void;
   onBackup: () => void;
   onRestore: (file: File) => void;
 }
@@ -36,6 +38,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   language,
   onUpdateCompany,
   onResetDemo,
+  onOpenSafeReset,
   onBackup,
   onRestore,
 }) => {
@@ -442,7 +445,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
 
       {/* TAB 3: DATA MANAGEMENT */}
       {activeTab === 'data' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Backup */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
             <div>
@@ -480,6 +483,26 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
             </label>
           </div>
 
+          {/* Safe Data Reset (Count = 0) */}
+          <div className="bg-white p-6 rounded-2xl border border-rose-200 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center mb-3">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-slate-900 text-sm mb-1">Safe Data Reset (0)</h3>
+              <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                Safely purge all transactional demo records (sales, purchases, expenses, parties, TDS) to 0 counts while preserving company GSTIN & settings.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenSafeReset}
+              className="w-full py-2.5 text-xs font-semibold rounded-xl text-white bg-rose-600 hover:bg-rose-700 shadow-xs cursor-pointer"
+            >
+              Purge Demo Data (0)
+            </button>
+          </div>
+
           {/* Reset Demo Data */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
             <div>
@@ -488,7 +511,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
               <h3 className="font-bold text-slate-900 text-sm mb-1">{t.common.resetDemo}</h3>
               <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                Reset system ledgers to the factory Indian demo enterprise (Shree Ganesh Enterprises Pvt Ltd) with sample transactions.
+                Reload factory Indian demo records (Shree Ganesh Enterprises) with sample transactions for demonstration.
               </p>
             </div>
             <button
@@ -496,7 +519,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               onClick={onResetDemo}
               className="w-full py-2.5 text-xs font-semibold rounded-xl text-amber-800 bg-amber-100 hover:bg-amber-200 cursor-pointer"
             >
-              Reset to Demo Records
+              Reload Sample Data
             </button>
           </div>
         </div>

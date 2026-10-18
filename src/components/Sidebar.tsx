@@ -17,6 +17,7 @@ import {
   UserCheck,
   Flame,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 import { Language } from '../types/accounting';
 import { AuthSession } from '../types/auth';
@@ -33,6 +34,7 @@ export type ActiveModule =
   | 'bankReconciliation'
   | 'ledgers'
   | 'reports'
+  | 'workspace'
   | 'settings';
 
 interface SidebarProps {
@@ -132,6 +134,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'reports',
       label: t.nav.reports,
       icon: BarChart3,
+    },
+    {
+      id: 'workspace',
+      label: language === 'hi' ? 'गूगल वर्कस्पेस' : 'Google Workspace',
+      icon: Sparkles,
+      badgeColor: 'bg-indigo-100 text-indigo-800',
     },
     {
       id: 'settings',

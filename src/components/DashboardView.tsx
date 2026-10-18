@@ -1,5 +1,15 @@
 import React, { useMemo } from 'react';
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from 'recharts';
+import {
   TrendingUp,
   TrendingDown,
   ReceiptText,
@@ -25,6 +35,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   FolderOpen,
+  Trash2,
 } from 'lucide-react';
 import {
   SalesInvoice,
@@ -51,6 +62,7 @@ interface DashboardViewProps {
   onOpenNewExpense: () => void;
   onOpenNewParty: () => void;
   onResetDemo?: () => void;
+  onSafeReset?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -66,6 +78,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewExpense,
   onOpenNewParty,
   onResetDemo,
+  onSafeReset,
 }) => {
   const t = translations[language];
 
@@ -112,11 +125,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       purchases.reduce((acc, curr) => acc + (curr.amountPaid || 0), 0) + totalExpenses,
     [purchases, totalExpenses]
   );
-  // Base capital ₹5,00,000 + collections - disbursements
-  const currentBankBalance = useMemo(
-    () => 500000 + totalCashCollected - totalCashDisbursed,
-    [totalCashCollected, totalCashDisbursed]
-  );
+  // Base capital ₹5,00,000 + collections - disbursements (0 if no transactions)
+  const currentBankBalance = useMemo(() => {
+    if (validSales.length === 0 && purchases.length === 0 && expenses.length === 0) {
+      return 0;
+    }
+    return 500000 + totalCashCollected - totalCashDisbursed;
+  }, [validSales.length, purchases.length, expenses.length, totalCashCollected, totalCashDisbursed]);
 
   // GST Calculations
   const outputGstTotal = useMemo(
@@ -327,6 +342,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Users className="w-3.5 h-3.5 text-slate-500" />
             <span>{t.dashboard.addParty}</span>
           </button>
+
+          {/* Safe Data Reset Shortcut */}
+          {onSafeReset && hasAnyRecords && (
+            <button
+              type="button"
+              onClick={onSafeReset}
+              title="Safe Data Reset: Purge demo sales, purchases, expenses, parties, TDS to 0 while keeping company profile"
+              className="inline-flex items-center space-x-1.5 px-3 py-2 text-xs font-semibold rounded-xl text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>{language === 'hi' ? 'डेमो डेटा रीसेट (0)' : 'Reset Data (0)'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -509,17 +537,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Middle Row: Monthly Sales & Expenses Dynamic Chart + Compliance Radar */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Dynamic Monthly Trend Visualization */}
+        {/* Financial Performance Section with Recharts BarChart */}
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <div>
-              <h2 className="font-bold text-slate-900 text-sm sm:text-base">
-                {t.dashboard.monthlyOverview}
-              </h2>
-              <p className="text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-emerald-600" />
+                <h2 className="font-bold text-slate-900 text-sm sm:text-base">
+                  Financial Performance (मासिक वित्तीय प्रदर्शन)
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
                 {language === 'hi'
-                  ? 'सहेजे गए वास्तविक बिलों के आधार पर मासिक टर्नओवर एवं व्यय तुलना'
-                  : 'Computed dynamically from saved sales, purchases, and expense vouchers'}
+                  ? 'Recharts द्वारा निर्मित वास्तविक सेल्स बनाम परचेज का तुलनात्मक चार्ट'
+                  : 'Monthly Sales vs. Purchases performance comparison powered by Recharts'}
               </p>
             </div>
             <div className="flex items-center space-x-3 text-xs font-medium">
@@ -531,54 +562,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
                 <span className="text-slate-600">Purchases</span>
               </div>
-              <div className="flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
-                <span className="text-slate-600">Expenses</span>
-              </div>
             </div>
           </div>
 
-          {/* SVG Bar Chart Visualization */}
-          <div className="h-60 w-full pt-4 flex flex-col justify-end">
-            <div className="grid grid-cols-6 h-48 gap-2 sm:gap-4 items-end border-b border-slate-200 pb-2">
-              {monthlyData.map((d, i) => {
-                const salesHeight = maxMonthlyVal > 0 ? Math.min(100, (d.sales / maxMonthlyVal) * 100) : 0;
-                const purcHeight = maxMonthlyVal > 0 ? Math.min(100, (d.purchase / maxMonthlyVal) * 100) : 0;
-                const expHeight = maxMonthlyVal > 0 ? Math.min(100, (d.expense / maxMonthlyVal) * 100) : 0;
-
-                return (
-                  <div key={i} className="flex flex-col items-center h-full justify-end group">
-                    <div className="flex items-end space-x-1 w-full justify-center h-full">
-                      {/* Sales Bar */}
-                      <div
-                        style={{ height: `${Math.max(4, salesHeight)}%` }}
-                        className={`w-2.5 sm:w-4 ${d.sales > 0 ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-200'} rounded-t-md transition-all relative cursor-pointer`}
-                        title={`Sales (${d.month}): ${formatINR(d.sales)}`}
-                      />
-                      {/* Purchases Bar */}
-                      <div
-                        style={{ height: `${Math.max(4, purcHeight)}%` }}
-                        className={`w-2.5 sm:w-4 ${d.purchase > 0 ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-slate-200'} rounded-t-md transition-all relative cursor-pointer`}
-                        title={`Purchases (${d.month}): ${formatINR(d.purchase)}`}
-                      />
-                      {/* Expenses Bar */}
-                      <div
-                        style={{ height: `${Math.max(4, expHeight)}%` }}
-                        className={`w-2.5 sm:w-4 ${d.expense > 0 ? 'bg-rose-400 hover:bg-rose-500' : 'bg-slate-200'} rounded-t-md transition-all relative cursor-pointer`}
-                        title={`Expenses (${d.month}): ${formatINR(d.expense)}`}
-                      />
-                    </div>
-                    <span className="text-[11px] font-semibold text-slate-600 mt-2">
-                      {d.month.split(' ')[0]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-2 font-mono">
-              <span>0% Baseline</span>
-              <span>Dynamic Peak: {formatINR(maxMonthlyVal)}</span>
-            </div>
+          {/* Recharts Bar Chart Container */}
+          <div className="h-64 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={monthlyData}
+                margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="month"
+                  stroke="#94a3b8"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(val) => val.split(' ')[0]}
+                />
+                <YAxis
+                  stroke="#94a3b8"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(val) =>
+                    val >= 100000
+                      ? `₹${(val / 100000).toFixed(1)}L`
+                      : val >= 1000
+                      ? `₹${(val / 1000).toFixed(0)}k`
+                      : `₹${val}`
+                  }
+                />
+                <Tooltip
+                  formatter={(value: any, name: any) => [
+                    formatINR(Number(value) || 0),
+                    name === 'sales' ? 'Sales Revenue' : 'Purchase Bills',
+                  ]}
+                  contentStyle={{
+                    backgroundColor: '#ffffff',
+                    borderRadius: '12px',
+                    borderColor: '#e2e8f0',
+                    fontSize: '12px',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+                  formatter={(val) => (val === 'sales' ? 'Sales Revenue' : 'Purchases')}
+                />
+                <Bar dataKey="sales" name="sales" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="purchase" name="purchase" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={36} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
