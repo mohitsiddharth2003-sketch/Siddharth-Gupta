@@ -1170,7 +1170,108 @@ export class AccountingService {
   static exportFullBackup(): string {
     const compId = this.getActiveCompanyId();
     const data = FirestoreAccountingService.exportBackup(compId);
+    this.recordBackupTime(compId);
     return JSON.stringify(data, null, 2);
+  }
+
+  static getLastBackupTime(companyId?: string): string | null {
+    try {
+      const compId = companyId || this.getActiveCompanyId();
+      return (
+        localStorage.getItem(`accountspro_last_backup_time_${compId}`) ||
+        localStorage.getItem('accountspro_last_backup_time') ||
+        null
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  static recordBackupTime(companyId?: string, timestamp?: string): void {
+    try {
+      const compId = companyId || this.getActiveCompanyId();
+      const timeStr = timestamp || new Date().toISOString();
+      localStorage.setItem(`accountspro_last_backup_time_${compId}`, timeStr);
+      localStorage.setItem('accountspro_last_backup_time', timeStr);
+      this.addAuditLog(
+        'CREATE',
+        'System',
+        'backup_export',
+        `Generated full system backup snapshot on ${new Date(timeStr).toLocaleString('en-IN')}`
+      );
+    } catch (e) {
+      console.error('Failed to record backup time:', e);
+    }
+  }
+
+  static getBackupDueStatus(companyId?: string): {
+    isOverdue: boolean;
+    daysSince: number | null;
+    lastBackup: string | null;
+    formattedDate: string;
+  } {
+    const lastBackup = this.getLastBackupTime(companyId);
+    if (!lastBackup) {
+      return {
+        isOverdue: true,
+        daysSince: null,
+        lastBackup: null,
+        formattedDate: 'Never (Initial backup required)',
+      };
+    }
+
+    try {
+      const lastTime = new Date(lastBackup).getTime();
+      if (isNaN(lastTime)) {
+        return {
+          isOverdue: true,
+          daysSince: null,
+          lastBackup: null,
+          formattedDate: 'Never (Initial backup required)',
+        };
+      }
+      const diffMs = Date.now() - lastTime;
+      const daysSince = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      const formattedDate = new Date(lastBackup).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      return {
+        isOverdue: daysSince >= 7,
+        daysSince,
+        lastBackup,
+        formattedDate: `${formattedDate} (${daysSince === 0 ? 'Today' : `${daysSince} day${daysSince > 1 ? 's' : ''} ago`})`,
+      };
+    } catch {
+      return {
+        isOverdue: true,
+        daysSince: null,
+        lastBackup: null,
+        formattedDate: 'Invalid timestamp (Backup required)',
+      };
+    }
+  }
+
+  static snoozeBackupReminder(hours = 24): void {
+    try {
+      const until = Date.now() + hours * 60 * 60 * 1000;
+      localStorage.setItem('accountspro_backup_snooze_until', until.toString());
+    } catch {}
+  }
+
+  static isBackupReminderSnoozed(): boolean {
+    try {
+      const untilRaw = localStorage.getItem('accountspro_backup_snooze_until');
+      if (!untilRaw) return false;
+      const until = parseInt(untilRaw, 10);
+      return !isNaN(until) && Date.now() < until;
+    } catch {
+      return false;
+    }
   }
 
   static async importFullBackupAsync(jsonString: string): Promise<{ success: boolean; error?: string }> {
@@ -1182,6 +1283,7 @@ export class AccountingService {
       }
       await FirestoreAccountingService.restoreBackup(compId, data);
       await this.syncWithFirestore(compId);
+      this.recordBackupTime(compId);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message || 'Failed to parse JSON file' };
@@ -1205,6 +1307,7 @@ export class AccountingService {
       setStorage(STORAGE_KEYS.JOURNALS, data.journals || []);
       this.addAuditLog('RESTORE', 'System', 'backup_restore', 'Restored system database from JSON backup file.');
       FirestoreAccountingService.restoreBackup(compId, data).catch(console.warn);
+      this.recordBackupTime(compId);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message || 'Failed to parse JSON file' };

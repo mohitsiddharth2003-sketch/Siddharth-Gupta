@@ -1,4 +1,6 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -756,8 +758,13 @@ async function startServer() {
     // If API credentials are configured, query authorized Sandbox.co.in or GSP Gateway
     if (apiKey) {
       try {
-        const provider = process.env.GST_PROVIDER || 'sandbox';
-        let targetUrl = process.env.GST_API_BASE_URL || `https://api.sandbox.co.in/gsp/public/gstin/${cleanGstin}`;
+        let baseUrl = process.env.GST_API_BASE_URL;
+        let targetUrl = '';
+        if (baseUrl && (baseUrl.startsWith('http://') || baseUrl.startsWith('https://'))) {
+          targetUrl = baseUrl.includes(cleanGstin) ? baseUrl : `${baseUrl.replace(/\/$/, '')}/${cleanGstin}`;
+        } else {
+          targetUrl = `https://api.sandbox.co.in/gsp/public/gstin/${cleanGstin}`;
+        }
         
         const reqHeaders: Record<string, string> = {
           Authorization: apiKey,

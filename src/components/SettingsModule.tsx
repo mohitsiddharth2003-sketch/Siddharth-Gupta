@@ -20,6 +20,7 @@ import {
 } from '../types/accounting';
 import { INDIAN_STATES, validateGSTIN, validatePAN } from '../utils/indianFormatters';
 import { translations } from '../utils/translations';
+import { GSTService } from '../services/gstService';
 
 interface SettingsModuleProps {
   company: CompanyProfile;
@@ -30,6 +31,14 @@ interface SettingsModuleProps {
   onOpenSafeReset?: () => void;
   onBackup: () => void;
   onRestore: (file: File) => void;
+  lastBackupStatus?: {
+    isOverdue: boolean;
+    daysSince: number | null;
+    lastBackup: string | null;
+    formattedDate: string;
+  };
+  onOpenBackupReminder?: () => void;
+  onSimulateOverdueBackup?: () => void;
 }
 
 export const SettingsModule: React.FC<SettingsModuleProps> = ({
@@ -41,6 +50,9 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
   onOpenSafeReset,
   onBackup,
   onRestore,
+  lastBackupStatus,
+  onOpenBackupReminder,
+  onSimulateOverdueBackup,
 }) => {
   const t = translations[language];
 
@@ -60,6 +72,45 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
       state: s.name,
       stateCode: s.code,
     }));
+  };
+
+  const handleCompanyGstinChange = (inputVal: string) => {
+    const val = inputVal.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
+    setFormData((prev) => {
+      const next = { ...prev, gstin: val };
+      if (val.length === 15) {
+        const instant = GSTService.getInstantGSTDetails(val);
+        if (instant) {
+          next.name = instant.legalName;
+          next.tradeName = instant.tradeName || instant.legalName;
+          if (instant.pan) next.pan = instant.pan;
+          next.state = instant.state;
+          next.stateCode = instant.stateCode;
+          if (instant.address) next.address = instant.address;
+          if (instant.city) next.city = instant.city;
+          if (instant.pincode) next.pincode = instant.pincode;
+        }
+      }
+      return next;
+    });
+
+    if (val.length === 15) {
+      GSTService.fetchDetails(val).then((res) => {
+        if (res.success && res.data) {
+          setFormData((prev) => ({
+            ...prev,
+            name: res.data!.legalName || prev.name,
+            tradeName: res.data!.tradeName || prev.tradeName,
+            pan: res.data!.pan || prev.pan,
+            state: res.data!.state || prev.state,
+            stateCode: res.data!.stateCode || prev.stateCode,
+            address: res.data!.address || prev.address,
+            city: res.data!.city || prev.city,
+            pincode: res.data!.pincode || prev.pincode,
+          }));
+        }
+      });
+    }
   };
 
   const handleSaveCompany = (e: React.FormEvent) => {
@@ -197,14 +248,22 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">GSTIN (15 Digits) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">GSTIN (15 Digits) *</label>
+                  {formData.gstin.length === 15 && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      Company Auto-filled ✓
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   maxLength={15}
                   value={formData.gstin}
-                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                  className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300"
+                  onChange={(e) => handleCompanyGstinChange(e.target.value)}
+                  placeholder="e.g. 27AABCS1429B1Z8"
+                  className="w-full font-mono text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white"
                 />
               </div>
 
@@ -445,26 +504,101 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
 
       {/* TAB 3: DATA MANAGEMENT */}
       {activeTab === 'data' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Backup */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3">
-                <Download className="w-5 h-5" />
+        <div className="space-y-6">
+          {/* 7-Day Backup Schedule & Compliance Status Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start space-x-3.5">
+              <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
+                  lastBackupStatus?.isOverdue
+                    ? 'bg-amber-50 text-amber-600 border-amber-200'
+                    : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                }`}
+              >
+                {lastBackupStatus?.isOverdue ? (
+                  <AlertTriangle className="w-6 h-6 animate-pulse" />
+                ) : (
+                  <ShieldCheck className="w-6 h-6" />
+                )}
               </div>
-              <h3 className="font-bold text-slate-900 text-sm mb-1">{t.common.backupData}</h3>
-              <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                Export complete database containing all sales invoices, purchase bills, parties, ledgers and audit records as an offline JSON snapshot.
-              </p>
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    7-Day Statutory Backup Cadence
+                  </h3>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      lastBackupStatus?.isOverdue
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    }`}
+                  >
+                    {lastBackupStatus?.isOverdue ? '⚠️ Backup Overdue (>7 Days)' : '✓ Backup Schedule Healthy'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Last system backup recorded:{' '}
+                  <span className="font-semibold text-slate-900">
+                    {lastBackupStatus?.formattedDate || 'Never (Initial backup pending)'}
+                  </span>
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Automatic modal reminders trigger when no full backup has occurred in the preceding 7 days to safeguard accounts under Indian Tax Audit rules.
+                </p>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={onBackup}
-              className="w-full py-2.5 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer"
-            >
-              Download Full Backup JSON
-            </button>
+
+            <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto shrink-0">
+              {onOpenBackupReminder && (
+                <button
+                  type="button"
+                  onClick={onOpenBackupReminder}
+                  className="px-3 py-2 text-xs font-semibold rounded-xl text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer"
+                >
+                  View Reminder Modal
+                </button>
+              )}
+              {onSimulateOverdueBackup && (
+                <button
+                  type="button"
+                  onClick={onSimulateOverdueBackup}
+                  title="Simulate 8-day overdue state to test the recurring notification and modal"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors cursor-pointer"
+                >
+                  Test 7-Day Alert
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onBackup}
+                className="px-3.5 py-2 text-xs font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Backup Now</span>
+              </button>
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Backup */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-3">
+                  <Download className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm mb-1">{t.common.backupData}</h3>
+                <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                  Export complete database containing all sales invoices, purchase bills, parties, ledgers and audit records as an offline JSON snapshot.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onBackup}
+                className="w-full py-2.5 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer"
+              >
+                Download Full Backup JSON
+              </button>
+            </div>
 
           {/* Restore */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
@@ -522,6 +656,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({
               Reload Sample Data
             </button>
           </div>
+        </div>
         </div>
       )}
     </div>

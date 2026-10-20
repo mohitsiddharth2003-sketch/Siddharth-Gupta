@@ -37,6 +37,7 @@ import { translations } from '../utils/translations';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { GSTINAutoFillField } from './GSTINAutoFillField';
 import { fetchGSTDetails } from '../services/gstApi';
+import { GSTService } from '../services/gstService';
 
 interface PartiesModuleProps {
   parties: Party[];

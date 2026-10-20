@@ -16,6 +16,7 @@ import {
   Database,
   RefreshCw,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Language, CompanyProfile } from '../types/accounting';
 import { AuthSession } from '../types/auth';
@@ -36,6 +37,8 @@ interface NavbarProps {
   onOpenAudit: () => void;
   onOpenCloudGuide?: () => void;
   isCloudSyncing?: boolean;
+  isBackupOverdue?: boolean;
+  onOpenBackupReminder?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,6 +55,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAudit,
   onOpenCloudGuide,
   isCloudSyncing = false,
+  isBackupOverdue = false,
+  onOpenBackupReminder,
 }) => {
   const t = translations[language];
 
@@ -152,6 +157,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ShieldCheck className="w-3.5 h-3.5 sm:mr-1 text-emerald-600" />
               <span className="hidden sm:inline">Audit</span>
             </button>
+
+            {/* 7-Day Backup Due Warning Indicator */}
+            {isBackupOverdue && (
+              <button
+                type="button"
+                onClick={onOpenBackupReminder || onBackup}
+                title="Statutory System Backup Due: No backup created in the last 7+ days"
+                className="inline-flex items-center px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 shadow-xs transition-colors cursor-pointer"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 sm:mr-1 text-amber-600 animate-pulse" />
+                <span className="hidden sm:inline">Backup Due</span>
+              </button>
+            )}
 
             {/* Backup Button */}
             <button

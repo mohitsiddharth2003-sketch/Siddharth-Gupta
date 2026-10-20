@@ -55,24 +55,33 @@ export const GSTINAutoFillField: React.FC<GSTINAutoFillFieldProps> = ({
   const cleanGstin = (gstin || '').trim().toUpperCase();
   const validation = GSTService.validate(cleanGstin);
 
-  const handleFetch = async () => {
-    if (!cleanGstin) return;
+  const handleFetch = async (targetGstin?: string | unknown) => {
+    const raw = typeof targetGstin === 'string' ? targetGstin : cleanGstin;
+    const toVerify = (raw || '').trim().toUpperCase();
+    if (!toVerify) return;
 
-    if (!validation.valid) {
+    const valCheck = GSTService.validate(toVerify);
+    if (!valCheck.valid) {
       setFeedback({
         success: false,
         configured: true,
         error: 'INVALID_FORMAT',
-        message: validation.error || 'Invalid 15-character GSTIN format.',
+        message: valCheck.error || 'Invalid 15-character GSTIN format.',
       });
       return;
+    }
+
+    // "gst dalte hi company name aa jaye": Apply instant 0ms company details immediately
+    const instant = GSTService.getInstantGSTDetails(toVerify);
+    if (instant) {
+      onDetailsFetched(instant);
     }
 
     setIsLoading(true);
     setFeedback(null);
 
     try {
-      const result = await GSTService.fetchDetails(cleanGstin);
+      const result = await GSTService.fetchDetails(toVerify);
       setFeedback(result);
 
       if (result.success && result.data) {
@@ -98,7 +107,26 @@ export const GSTINAutoFillField: React.FC<GSTINAutoFillFieldProps> = ({
     if (feedback) {
       setFeedback(null);
     }
+
+    // "gst dalte hi company name aa jaye": Instantly auto-fill company name the moment 15 digits are entered
+    if (val.length === 15) {
+      const instant = GSTService.getInstantGSTDetails(val);
+      if (instant) {
+        onDetailsFetched(instant);
+      }
+      handleFetch(val);
+    }
   };
+
+  // Auto-fill on mount or prop update if 15 chars provided
+  React.useEffect(() => {
+    if (cleanGstin.length === 15 && !verifiedAt && !feedback) {
+      const instant = GSTService.getInstantGSTDetails(cleanGstin);
+      if (instant) {
+        onDetailsFetched(instant);
+      }
+    }
+  }, [cleanGstin]);
 
   const isVerifiedActive =
     (feedback?.success && !feedback.isInactive) ||
@@ -151,7 +179,7 @@ export const GSTINAutoFillField: React.FC<GSTINAutoFillFieldProps> = ({
         <button
           type="button"
           disabled={disabled || isLoading || cleanGstin.length !== 15}
-          onClick={handleFetch}
+          onClick={() => handleFetch(cleanGstin)}
           title="Fetch GST Registration Details from Authorized Registry"
           className={`inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs ${
             cleanGstin.length === 15 && !isLoading

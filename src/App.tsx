@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CompanyProfile,
   Party,
@@ -37,8 +37,9 @@ import { ReportsModule } from './components/ReportsModule';
 import { SettingsModule } from './components/SettingsModule';
 import { WorkspaceModule } from './components/WorkspaceModule';
 import { SafeDataResetModal } from './components/SafeDataResetModal';
+import { BackupReminderModal } from './components/BackupReminderModal';
 import { translations } from './utils/translations';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Download, Clock, X } from 'lucide-react';
 import { SystemAuditModal } from './components/SystemAuditModal';
 import { FirebaseSetupGuideModal } from './components/FirebaseSetupGuideModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -104,6 +105,37 @@ export default function App() {
   const [isSafeResetModalOpen, setIsSafeResetModalOpen] = useState(false);
   const [selectedLedgerPartyId, setSelectedLedgerPartyId] = useState<string | undefined>(undefined);
 
+  // 7-day recurring backup reminder state
+  const [backupStatus, setBackupStatus] = useState(() => AccountingService.getBackupDueStatus());
+  const [isBackupReminderOpen, setIsBackupReminderOpen] = useState(false);
+  const [isBackupBannerDismissed, setIsBackupBannerDismissed] = useState(false);
+  const hasAutoPromptedBackup = useRef(false);
+
+  // Periodic recurring check for 7-day backup schedule
+  useEffect(() => {
+    const checkBackupCadence = () => {
+      const status = AccountingService.getBackupDueStatus();
+      setBackupStatus(status);
+
+      if (status.isOverdue && !AccountingService.isBackupReminderSnoozed()) {
+        if (!hasAutoPromptedBackup.current) {
+          hasAutoPromptedBackup.current = true;
+          setIsBackupReminderOpen(true);
+        }
+      }
+    };
+
+    // Initial check shortly after load
+    const timer = setTimeout(checkBackupCadence, 1000);
+    // Recurring interval check every 60 seconds
+    const interval = setInterval(checkBackupCadence, 60000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, []);
+
   // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -123,6 +155,7 @@ export default function App() {
     setBankItems(AccountingService.getBankItems());
     setJournals(AccountingService.getJournals());
     setAuditLogs(AccountingService.getAuditLogs());
+    setBackupStatus(AccountingService.getBackupDueStatus());
   };
 
   const handleSafeResetComplete = () => {
@@ -287,7 +320,30 @@ export default function App() {
     a.download = `AccountsPro_India_Backup_${company.financialYear}_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Full system backup downloaded.');
+    const updatedStatus = AccountingService.getBackupDueStatus();
+    setBackupStatus(updatedStatus);
+    setIsBackupReminderOpen(false);
+    refreshAllState();
+    showToast('Full system backup downloaded and timestamp logged.');
+  };
+
+  const handleSnoozeBackup = (hours = 24) => {
+    AccountingService.snoozeBackupReminder(hours);
+    setIsBackupReminderOpen(false);
+    showToast(`Backup reminder snoozed for ${hours} hours.`);
+  };
+
+  const handleSimulateOverdueBackup = () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString();
+    AccountingService.recordBackupTime(undefined, eightDaysAgo);
+    try {
+      localStorage.removeItem('accountspro_backup_snooze_until');
+    } catch {}
+    const updated = AccountingService.getBackupDueStatus();
+    setBackupStatus(updated);
+    setIsBackupBannerDismissed(false);
+    setIsBackupReminderOpen(true);
+    showToast('Simulated 8-day overdue backup state (reminder triggered).', 'success');
   };
 
   const handleRestore = (file: File) => {
@@ -349,7 +405,70 @@ export default function App() {
         onOpenAudit={() => setIsAuditModalOpen(true)}
         onOpenCloudGuide={() => setIsCloudGuideOpen(true)}
         isCloudSyncing={isCloudSyncing}
+        isBackupOverdue={backupStatus.isOverdue}
+        onOpenBackupReminder={() => setIsBackupReminderOpen(true)}
       />
+
+      {/* 7-Day Overdue Recurring Backup Notification Banner */}
+      {backupStatus.isOverdue && !isBackupBannerDismissed && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white px-4 py-2.5 shadow-sm print:hidden">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center space-x-2.5">
+              <span className="p-1 rounded-lg bg-white/20 text-white shrink-0">
+                <AlertTriangle className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-bold">
+                  {language === 'hi' ? 'साप्ताहिक बैकअप अनुस्मारक: ' : 'Weekly Backup Overdue: '}
+                </span>
+                <span>
+                  {backupStatus.daysSince === null
+                    ? language === 'hi'
+                      ? 'कोई बैकअप रिकॉर्ड नहीं मिला। आयकर व जीएसटी नियमों के अनुसार नियमित ऑफलाइन बैकअप आवश्यक है।'
+                      : 'No complete offline system backup has been created yet. Back up your financial records now.'
+                    : language === 'hi'
+                    ? `अंतिम बैकअप ${backupStatus.daysSince} दिन पहले लिया गया था (7 दिनों से अधिक)।`
+                    : `Last system backup was created ${backupStatus.daysSince} days ago (exceeds the 7-day safety cycle).`}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleBackup}
+                className="px-3 py-1 bg-white text-amber-900 hover:bg-amber-50 font-bold rounded-lg shadow-xs flex items-center space-x-1 transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{language === 'hi' ? 'अभी बैकअप लें' : 'Backup Now'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBackupReminderOpen(true)}
+                className="px-2.5 py-1 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                {language === 'hi' ? 'विवरण' : 'Details'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSnoozeBackup(24)}
+                className="px-2 py-1 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                title="Snooze for 24 hours"
+              >
+                <Clock className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBackupBannerDismissed(true)}
+                className="p-1 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-colors cursor-pointer"
+                title="Dismiss banner"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Body */}
       <div className="flex-1 flex max-w-7xl w-full mx-auto">
@@ -525,6 +644,9 @@ export default function App() {
               onOpenSafeReset={() => setIsSafeResetModalOpen(true)}
               onBackup={handleBackup}
               onRestore={handleRestore}
+              lastBackupStatus={backupStatus}
+              onOpenBackupReminder={() => setIsBackupReminderOpen(true)}
+              onSimulateOverdueBackup={handleSimulateOverdueBackup}
             />
           )}
         </main>
@@ -541,6 +663,25 @@ export default function App() {
           <span>{toast.message}</span>
         </div>
       )}
+
+      {/* 7-Day Recurring Backup Reminder Modal */}
+      <BackupReminderModal
+        isOpen={isBackupReminderOpen}
+        onClose={() => setIsBackupReminderOpen(false)}
+        onBackupNow={handleBackup}
+        onSnooze={handleSnoozeBackup}
+        daysSince={backupStatus.daysSince}
+        lastBackupFormatted={backupStatus.formattedDate}
+        recordCounts={{
+          sales: sales.length,
+          purchases: purchases.length,
+          expenses: expenses.length,
+          parties: parties.length,
+          tds: tdsRecords.length,
+          journals: journals.length,
+        }}
+        language={language}
+      />
 
       {/* Safe Data Reset Modal */}
       <SafeDataResetModal
