@@ -425,10 +425,14 @@ export const PurchaseBillsModule: React.FC<PurchaseBillsModuleProps> = ({
             setEditingBill(null);
             setIsCreateOpen(true);
           }}
+          title="Create Purchase Bill (Ctrl + B)"
           className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-semibold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>{t.purchases.newBill}</span>
+          <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.2 text-[9px] font-mono bg-indigo-700 rounded border border-indigo-500/60 text-indigo-100 font-bold">
+            Ctrl+B
+          </kbd>
         </button>
       </div>
 
@@ -660,38 +664,22 @@ export const PurchaseBillsModule: React.FC<PurchaseBillsModuleProps> = ({
 
               {/* Supplier Details & GST Auto-Fill */}
               <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      {t.purchases.vendor} (Select Saved Supplier)
-                    </label>
-                    <select
-                      value={formData.vendorId}
-                      onChange={(e) => handleVendorChange(e.target.value)}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-800"
-                    >
-                      <option value="">-- Select Saved Vendor (or Auto-Fill via GSTIN below) --</option>
-                      {vendors.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name} {v.gstin ? `(${v.gstin})` : `(${v.state})`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">
-                      Supplier Legal Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Supplier / Vendor Legal Business Name"
-                      value={formData.vendorName || ''}
-                      onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white font-medium text-slate-900"
-                    />
-                  </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {language === 'hi' ? 'आपूर्तिकर्ता / विक्रेता का नाम *' : 'Supplier / Vendor Legal Name *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={
+                      language === 'hi'
+                        ? 'आपूर्तिकर्ता फर्म का कानूनी नाम (या नीचे जीएसटी नंबर दर्ज करें)'
+                        : 'Supplier / Vendor Legal Business Name (or Auto-Fill via GSTIN below)'
+                    }
+                    value={formData.vendorName || ''}
+                    onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
+                    className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
                 </div>
 
                 {/* GSTIN Auto-Fill Field */}

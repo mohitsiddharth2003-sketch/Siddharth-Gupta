@@ -39,3 +39,29 @@ export interface CloudAuthStatus {
   description: string;
   securityNotice: string;
 }
+
+export interface ActiveSessionInfo {
+  sessionId: string;
+  userId: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  companyId: string;
+  companyName: string;
+  loginTimestamp: number;
+  lastActiveTimestamp: number;
+  isOnline: boolean;
+  deviceInfo?: string;
+  isCurrentDevice?: boolean;
+}
+
+export interface TeamMemberInfo {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  companyId: string;
+  createdAt: string;
+  lastLogin?: string;
+  isOnline: boolean;
+}

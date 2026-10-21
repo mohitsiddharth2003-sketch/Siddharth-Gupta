@@ -14,6 +14,8 @@ import {
   X,
   PlusCircle,
   FileSpreadsheet,
+  QrCode,
+  Truck,
 } from 'lucide-react';
 import {
   SalesInvoice,
@@ -27,6 +29,8 @@ import {
   PaymentRecord,
   GSTDetails,
 } from '../types/accounting';
+import { EInvoiceRecord } from '../types/einvoice';
+import { EWayBillRecord } from '../types/ewaybill';
 import {
   formatINR,
   numberToWordsINR,
@@ -43,9 +47,13 @@ interface SalesInvoiceModuleProps {
   sales: SalesInvoice[];
   parties: Party[];
   company: CompanyProfile;
+  eInvoices?: EInvoiceRecord[];
+  eWayBills?: EWayBillRecord[];
   language: Language;
   onSaveInvoice: (inv: SalesInvoice) => void;
   onDeleteInvoice: (id: string, reason: string) => void;
+  onNavigateToEInvoice?: (invoiceId: string) => void;
+  onNavigateToEWayBill?: (invoiceId: string) => void;
   isCreateOpen: boolean;
   setIsCreateOpen: (open: boolean) => void;
 }
@@ -56,9 +64,13 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
   sales,
   parties,
   company,
+  eInvoices = [],
+  eWayBills = [],
   language,
   onSaveInvoice,
   onDeleteInvoice,
+  onNavigateToEInvoice,
+  onNavigateToEWayBill,
   isCreateOpen,
   setIsCreateOpen,
 }) => {
@@ -599,10 +611,14 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
               setEditingInvoice(null);
               setIsCreateOpen(true);
             }}
+            title="Create Tax Invoice (Ctrl + N)"
             className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-semibold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>{t.invoices.newInvoice}</span>
+            <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.2 text-[9px] font-mono bg-emerald-700 rounded border border-emerald-500/60 text-emerald-100 font-bold">
+              Ctrl+N
+            </kbd>
           </button>
         </div>
       </div>
@@ -685,6 +701,12 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
               ) : (
                 filteredSales.map((inv) => {
                   const totalGst = inv.cgstTotal + inv.sgstTotal + inv.igstTotal;
+                  const matchingIrn = eInvoices.find(
+                    (e) => (e.invoiceId === inv.id || e.invoiceNumber === inv.invoiceNumber) && e.status === 'GENERATED'
+                  );
+                  const matchingEwb = eWayBills.find(
+                    (e) => (e.invoiceId === inv.id || e.invoiceNumber === inv.invoiceNumber || e.docNo === inv.invoiceNumber) && e.status === 'ACT'
+                  );
                   return (
                     <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-slate-900 font-mono">
@@ -728,21 +750,35 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            inv.status === 'Paid'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : inv.status === 'Issued'
-                              ? 'bg-blue-100 text-blue-800'
-                              : inv.status === 'Partially Paid'
-                              ? 'bg-amber-100 text-amber-800'
-                              : inv.status === 'Draft'
-                              ? 'bg-slate-100 text-slate-700'
-                              : 'bg-rose-100 text-rose-800'
-                          }`}
-                        >
-                          {inv.status}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              inv.status === 'Paid'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : inv.status === 'Issued'
+                                ? 'bg-blue-100 text-blue-800'
+                                : inv.status === 'Partially Paid'
+                                ? 'bg-amber-100 text-amber-800'
+                                : inv.status === 'Draft'
+                                ? 'bg-slate-100 text-slate-700'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {inv.status}
+                          </span>
+                          {matchingIrn && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-violet-100 text-violet-800 border border-violet-200">
+                              <QrCode className="w-2.5 h-2.5" />
+                              <span>IRN</span>
+                            </span>
+                          )}
+                          {matchingEwb && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                              <Truck className="w-2.5 h-2.5" />
+                              <span>EWB</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center space-x-1">
@@ -754,6 +790,36 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+
+                          {onNavigateToEInvoice && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToEInvoice(inv.id)}
+                              title={matchingIrn ? 'View Registered E-Invoice (IRN)' : 'Generate Statutory E-Invoice (IRN)'}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                matchingIrn
+                                  ? 'text-violet-700 bg-violet-50 hover:bg-violet-100'
+                                  : 'text-slate-400 hover:text-violet-700 hover:bg-violet-50'
+                              }`}
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {onNavigateToEWayBill && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToEWayBill(inv.id)}
+                              title={matchingEwb ? 'View Active E-Way Bill' : 'Generate E-Way Bill for Consignment'}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                matchingEwb
+                                  ? 'text-blue-700 bg-blue-50 hover:bg-blue-100'
+                                  : 'text-slate-400 hover:text-blue-700 hover:bg-blue-50'
+                              }`}
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           {inv.balanceDue > 0 && (
                             <button
@@ -1340,6 +1406,16 @@ export const SalesInvoiceModule: React.FC<SalesInvoiceModuleProps> = ({
       <InvoicePrintPreviewModal
         invoice={previewInvoice}
         company={company}
+        eInvoice={
+          previewInvoice
+            ? eInvoices.find(
+                (e) =>
+                  (e.invoiceId === previewInvoice.id ||
+                    e.invoiceNumber === previewInvoice.invoiceNumber) &&
+                  e.status === 'GENERATED'
+              ) || null
+            : null
+        }
         isOpen={!!previewInvoice}
         onClose={() => setPreviewInvoice(null)}
         language={language}

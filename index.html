@@ -20,6 +20,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Suppress benign Vite HMR websocket errors in preview environment where HMR is disabled
+      window.addEventListener('error', function (e) {
+        if (
+          e &&
+          (e.message?.includes('WebSocket closed without opened') ||
+            e.filename?.includes('@vite/client') ||
+            (e.error && e.error.message?.includes('WebSocket closed without opened')))
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        if (e && e.reason && String(e.reason).includes('WebSocket closed without opened')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>

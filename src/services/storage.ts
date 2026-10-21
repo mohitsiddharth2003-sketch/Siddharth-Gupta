@@ -9,6 +9,8 @@ import {
   JournalEntry,
   AuditLogEntry,
 } from '../types/accounting';
+import { EInvoiceRecord } from '../types/einvoice';
+import { EWayBillRecord } from '../types/ewaybill';
 import { numberToWordsINR } from '../utils/indianFormatters';
 import { FirestoreAccountingService } from './firestoreAccounting';
 
@@ -23,6 +25,8 @@ const STORAGE_KEYS = {
   JOURNALS: 'accountspro_journals',
   AUDIT_LOG: 'accountspro_audit_log',
   IS_DEMO: 'accountspro_is_demo',
+  EINVOICES: 'accountspro_einvoices',
+  EWAYBILLS: 'accountspro_ewaybills',
 };
 
 export const INITIAL_COMPANY: CompanyProfile = {
@@ -718,6 +722,149 @@ export const SAMPLE_DEMO_JOURNALS: JournalEntry[] = [
   },
 ];
 
+export const INITIAL_EINVOICES: EInvoiceRecord[] = [];
+
+export const SAMPLE_DEMO_EINVOICES: EInvoiceRecord[] = [
+  {
+    id: 'einv_demo_01',
+    invoiceId: 'inv_01',
+    invoiceNumber: 'SGE/26-27/101',
+    invoiceDate: '2026-04-05',
+    supplyType: 'B2B',
+    sellerGstin: '27AABCS1429B1Z8',
+    sellerLegalName: 'Shree Ganesh Enterprises Pvt Ltd',
+    sellerTradeName: 'Ganesh Tech & Engineering Solutions',
+    sellerAddress: 'Plot No. 42, Sector 9, MIDC Industrial Area, Andheri East',
+    sellerPlace: 'Mumbai',
+    sellerStateCode: '27',
+    sellerPincode: '400093',
+    buyerGstin: '27AAACA9012K1ZP',
+    buyerLegalName: 'Apex Retail Technologies Ltd',
+    buyerTradeName: 'Apex Retail',
+    buyerAddress: 'Tower B, 4th Floor, Mindspace Tech Park, Malad West',
+    buyerPlace: 'Mumbai',
+    buyerStateCode: '27',
+    buyerPincode: '400064',
+    placeOfSupplyCode: '27',
+    totalTaxableValue: 109700,
+    cgstValue: 9873,
+    sgstValue: 9873,
+    igstValue: 0,
+    roundOff: 0,
+    totalInvoiceValue: 129446,
+    items: [
+      {
+        itemNo: 1,
+        productDesc: 'Enterprise Cloud Accounting & ERP Software Implementation',
+        isService: true,
+        hsnCode: '998313',
+        quantity: 1,
+        unit: 'NOS',
+        unitPrice: 109700,
+        totalAmount: 109700,
+        discount: 0,
+        taxableAmount: 109700,
+        gstRate: 18,
+        cgstAmount: 9873,
+        sgstAmount: 9873,
+        igstAmount: 0,
+        totalItemValue: 129446,
+      },
+    ],
+    irn: '5C72D24E1955AEF9B27CA74D7653F8CEE8457D284D8BF582695507E882E47481',
+    ackNo: '1126109482910482',
+    ackDate: '2026-04-05T10:35:00Z',
+    signedQRCode: 'NIC:EINVOICE:1.03:27AABCS1429B1Z8:27AAACA9012K1ZP:SGE/26-27/101:INV:2026-04-05:129446:1:998313:5C72D24E1955AEF9B27CA74D7653F8CEE8457D284D8BF582695507E882E47481',
+    signedInvoicePayload: JSON.stringify({
+      Version: '1.03',
+      DocDtls: { Typ: 'INV', No: 'SGE/26-27/101', Dt: '2026-04-05' },
+      Irn: '5C72D24E1955AEF9B27CA74D7653F8CEE8457D284D8BF582695507E882E47481',
+      Status: 'ACT',
+    }, null, 2),
+    status: 'GENERATED',
+    isSandbox: true,
+    irpProvider: 'NIC-Sandbox (Simulation Engine)',
+    createdAt: '2026-04-05T10:35:00Z',
+    updatedAt: '2026-04-05T10:35:00Z',
+  },
+];
+
+export const INITIAL_EWAYBILLS: EWayBillRecord[] = [];
+
+export const SAMPLE_DEMO_EWAYBILLS: EWayBillRecord[] = [
+  {
+    id: 'ewb_demo_01',
+    ewbNo: '241088492019',
+    ewbDate: '2026-04-05T11:00:00Z',
+    validUpto: '2026-04-07T23:59:59Z',
+    status: 'ACT',
+    invoiceId: 'inv_01',
+    invoiceNumber: 'SGE/26-27/101',
+    irn: '5C72D24E1955AEF9B27CA74D7653F8CEE8457D284D8BF582695507E882E47481',
+    supplyType: 'Outward',
+    subSupplyType: 'Supply',
+    docType: 'INV',
+    docNo: 'SGE/26-27/101',
+    docDate: '2026-04-05',
+    fromGstin: '27AABCS1429B1Z8',
+    fromTradeName: 'Ganesh Tech & Engineering Solutions',
+    fromAddress: 'Plot No. 42, Sector 9, MIDC Industrial Area, Andheri East',
+    fromPlace: 'Mumbai',
+    fromPincode: '400093',
+    fromStateCode: '27',
+    toGstin: '27AAACA9012K1ZP',
+    toTradeName: 'Apex Retail Technologies Ltd',
+    toAddress: 'Tower B, 4th Floor, Mindspace Tech Park, Malad West',
+    toPlace: 'Mumbai',
+    toPincode: '400064',
+    toStateCode: '27',
+    totalValue: 129446,
+    totalTaxable: 109700,
+    cgstValue: 9873,
+    sgstValue: 9873,
+    igstValue: 0,
+    items: [
+      {
+        itemNo: 1,
+        productName: 'Server & ERP Hardware System',
+        hsnCode: '847130',
+        quantity: 1,
+        unit: 'SET',
+        taxableAmount: 109700,
+        cgstRate: 9,
+        sgstRate: 9,
+        igstRate: 0,
+        totalAmount: 129446,
+      },
+    ],
+    transporterId: '27AABCT2345C1Z1',
+    transporterName: 'Express Logistics India',
+    transMode: '1',
+    transDocNo: 'LR/2026/8849',
+    transDocDate: '2026-04-05',
+    vehicleNo: 'MH02AB1234',
+    vehicleType: 'R',
+    distance: 45,
+    partBHistory: [
+      {
+        vehicleNo: 'MH02AB1234',
+        fromPlace: 'Mumbai MIDC',
+        fromState: '27',
+        reasonCode: '4',
+        reasonRemarks: 'First time dispatch assignment',
+        transDocNo: 'LR/2026/8849',
+        transDocDate: '2026-04-05',
+        updatedAt: '2026-04-05T11:00:00Z',
+      },
+    ],
+    validityExtensionHistory: [],
+    isSandbox: true,
+    irpProvider: 'NIC-EWB-Sandbox (Simulation Engine)',
+    createdAt: '2026-04-05T11:00:00Z',
+    updatedAt: '2026-04-05T11:00:00Z',
+  },
+];
+
 export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
   {
     id: 'log_01',
@@ -1166,6 +1313,167 @@ export class AccountingService {
     FirestoreAccountingService.addAuditLog(compId, action, module, recordId, details, user).catch(() => {});
   }
 
+  // ==========================================
+  // E-INVOICE STATUTORY METHODS
+  // ==========================================
+  static getEInvoices(): EInvoiceRecord[] {
+    return getStorage<EInvoiceRecord[]>(STORAGE_KEYS.EINVOICES, INITIAL_EINVOICES);
+  }
+
+  static saveEInvoice(rec: EInvoiceRecord): { success: boolean; error?: string } {
+    const list = this.getEInvoices();
+    const existingIdx = list.findIndex((e) => e.id === rec.id || e.irn === rec.irn);
+    if (existingIdx >= 0) {
+      list[existingIdx] = rec;
+      this.addAuditLog('UPDATE', 'E-Invoice', rec.irn, `Updated E-Invoice status to ${rec.status} for Invoice ${rec.invoiceNumber}.`);
+    } else {
+      list.unshift(rec);
+      this.addAuditLog('CREATE', 'E-Invoice', rec.irn, `Generated statutory IRN ${rec.irn.substring(0, 16)}... for Invoice ${rec.invoiceNumber} (${rec.isSandbox ? 'SANDBOX DEMO' : 'LIVE'}).`);
+    }
+    setStorage(STORAGE_KEYS.EINVOICES, list);
+    return { success: true };
+  }
+
+  static getEInvoiceByInvoiceId(invId: string): EInvoiceRecord | undefined {
+    return this.getEInvoices().find((e) => e.invoiceId === invId || e.invoiceNumber === invId);
+  }
+
+  static getEInvoiceByIrn(irn: string): EInvoiceRecord | undefined {
+    return this.getEInvoices().find((e) => e.irn === irn);
+  }
+
+  static cancelEInvoice(irn: string, reason: string, remarks: string, user = 'Senior Accountant'): { success: boolean; error?: string } {
+    const list = this.getEInvoices();
+    const target = list.find((e) => e.irn === irn);
+    if (!target) {
+      return { success: false, error: 'E-Invoice record not found' };
+    }
+    target.status = 'CANCELLED';
+    target.cancelReason = (reason as any) || '4';
+    target.cancelRemarks = remarks;
+    target.cancelledAt = new Date().toISOString();
+    target.updatedAt = new Date().toISOString();
+    setStorage(STORAGE_KEYS.EINVOICES, list);
+    this.addAuditLog('UPDATE', 'E-Invoice', irn, `Cancelled IRN for Invoice ${target.invoiceNumber}. Reason: ${remarks}`, user);
+    return { success: true };
+  }
+
+  static deleteEInvoice(id: string): void {
+    const list = this.getEInvoices().filter((e) => e.id !== id && e.irn !== id);
+    setStorage(STORAGE_KEYS.EINVOICES, list);
+    this.addAuditLog('DELETE', 'E-Invoice', id, 'Deleted local e-invoice record cache.');
+  }
+
+  // ==========================================
+  // E-WAY BILL STATUTORY METHODS
+  // ==========================================
+  static getEWayBills(): EWayBillRecord[] {
+    return getStorage<EWayBillRecord[]>(STORAGE_KEYS.EWAYBILLS, INITIAL_EWAYBILLS);
+  }
+
+  static saveEWayBill(ewb: EWayBillRecord): { success: boolean; error?: string } {
+    const list = this.getEWayBills();
+    const existingIdx = list.findIndex((e) => e.id === ewb.id || e.ewbNo === ewb.ewbNo);
+    if (existingIdx >= 0) {
+      list[existingIdx] = ewb;
+      this.addAuditLog('UPDATE', 'E-Way Bill', ewb.ewbNo, `Updated E-Way Bill ${ewb.ewbNo} status: ${ewb.status}.`);
+    } else {
+      list.unshift(ewb);
+      this.addAuditLog('CREATE', 'E-Way Bill', ewb.ewbNo, `Generated statutory E-Way Bill ${ewb.ewbNo} for Doc ${ewb.docNo} (${ewb.isSandbox ? 'SANDBOX DEMO' : 'LIVE'}).`);
+    }
+    setStorage(STORAGE_KEYS.EWAYBILLS, list);
+    return { success: true };
+  }
+
+  static getEWayBillById(id: string): EWayBillRecord | undefined {
+    return this.getEWayBills().find((e) => e.id === id);
+  }
+
+  static getEWayBillByEwbNo(ewbNo: string): EWayBillRecord | undefined {
+    return this.getEWayBills().find((e) => e.ewbNo === ewbNo);
+  }
+
+  static getEWayBillByInvoiceId(invId: string): EWayBillRecord | undefined {
+    return this.getEWayBills().find((e) => e.invoiceId === invId || e.invoiceNumber === invId || e.docNo === invId);
+  }
+
+  static updateEWayBillPartB(
+    ewbNo: string,
+    update: { vehicleNo: string; fromPlace: string; fromState: string; reasonCode: '1' | '2' | '3' | '4'; reasonRemarks: string; transDocNo?: string; transDocDate?: string },
+    user = 'Transport Officer'
+  ): { success: boolean; error?: string } {
+    const list = this.getEWayBills();
+    const target = list.find((e) => e.ewbNo === ewbNo);
+    if (!target) return { success: false, error: 'E-Way Bill not found' };
+
+    target.vehicleNo = update.vehicleNo.toUpperCase();
+    target.partBHistory.push({
+      vehicleNo: update.vehicleNo.toUpperCase(),
+      fromPlace: update.fromPlace,
+      fromState: update.fromState,
+      reasonCode: update.reasonCode,
+      reasonRemarks: update.reasonRemarks,
+      transDocNo: update.transDocNo,
+      transDocDate: update.transDocDate,
+      updatedAt: new Date().toISOString(),
+    });
+    target.updatedAt = new Date().toISOString();
+    setStorage(STORAGE_KEYS.EWAYBILLS, list);
+    this.addAuditLog('UPDATE', 'E-Way Bill', ewbNo, `Updated Part B: Assigned vehicle ${update.vehicleNo} at ${update.fromPlace}.`, user);
+    return { success: true };
+  }
+
+  static extendEWayBillValidity(
+    ewbNo: string,
+    extension: { remainingDistance: number; currentPlace: string; currentPincode?: string; reasonCode: '1' | '2' | '3' | '4' | '5'; remarks: string },
+    user = 'Senior Accountant'
+  ): { success: boolean; error?: string } {
+    const list = this.getEWayBills();
+    const target = list.find((e) => e.ewbNo === ewbNo);
+    if (!target) return { success: false, error: 'E-Way Bill not found' };
+
+    const addDays = Math.max(1, Math.ceil(extension.remainingDistance / 200));
+    const newValidUptoDate = new Date(Date.now() + addDays * 24 * 60 * 60 * 1000);
+    newValidUptoDate.setHours(23, 59, 59, 999);
+    const newValidUpto = newValidUptoDate.toISOString();
+
+    target.validUpto = newValidUpto;
+    target.validityExtensionHistory.push({
+      remainingDistance: extension.remainingDistance,
+      currentPlace: extension.currentPlace,
+      currentPincode: extension.currentPincode,
+      reasonCode: extension.reasonCode,
+      remarks: extension.remarks,
+      extendedUpto: newValidUpto,
+      updatedAt: new Date().toISOString(),
+    });
+    target.updatedAt = new Date().toISOString();
+    setStorage(STORAGE_KEYS.EWAYBILLS, list);
+    this.addAuditLog('UPDATE', 'E-Way Bill', ewbNo, `Extended validity upto ${new Date(newValidUpto).toLocaleDateString('en-IN')} for remaining ${extension.remainingDistance} KM.`, user);
+    return { success: true };
+  }
+
+  static cancelEWayBill(ewbNo: string, reason: string, remarks: string, user = 'Senior Accountant'): { success: boolean; error?: string } {
+    const list = this.getEWayBills();
+    const target = list.find((e) => e.ewbNo === ewbNo);
+    if (!target) return { success: false, error: 'E-Way Bill not found' };
+
+    target.status = 'CNL';
+    target.cancelReason = (reason as any) || '4';
+    target.cancelRemarks = remarks;
+    target.cancelledAt = new Date().toISOString();
+    target.updatedAt = new Date().toISOString();
+    setStorage(STORAGE_KEYS.EWAYBILLS, list);
+    this.addAuditLog('UPDATE', 'E-Way Bill', ewbNo, `Cancelled E-Way Bill ${ewbNo}. Reason: ${remarks}`, user);
+    return { success: true };
+  }
+
+  static deleteEWayBill(id: string): void {
+    const list = this.getEWayBills().filter((e) => e.id !== id && e.ewbNo !== id);
+    setStorage(STORAGE_KEYS.EWAYBILLS, list);
+    this.addAuditLog('DELETE', 'E-Way Bill', id, 'Deleted local e-way bill record cache.');
+  }
+
   // Backup & Restore
   static exportFullBackup(): string {
     const compId = this.getActiveCompanyId();
@@ -1305,6 +1613,8 @@ export class AccountingService {
       setStorage(STORAGE_KEYS.TDS, data.tdsRecords || data.tds || []);
       setStorage(STORAGE_KEYS.BANK_ITEMS, data.bankItems || []);
       setStorage(STORAGE_KEYS.JOURNALS, data.journals || []);
+      setStorage(STORAGE_KEYS.EINVOICES, data.eInvoices || data.einvoices || []);
+      setStorage(STORAGE_KEYS.EWAYBILLS, data.eWayBills || data.ewaybills || []);
       this.addAuditLog('RESTORE', 'System', 'backup_restore', 'Restored system database from JSON backup file.');
       FirestoreAccountingService.restoreBackup(compId, data).catch(console.warn);
       this.recordBackupTime(compId);
@@ -1326,6 +1636,8 @@ export class AccountingService {
     setStorage(STORAGE_KEYS.BANK_ITEMS, SAMPLE_DEMO_BANK_ITEMS);
     setStorage(STORAGE_KEYS.JOURNALS, SAMPLE_DEMO_JOURNALS);
     setStorage(STORAGE_KEYS.AUDIT_LOG, INITIAL_AUDIT_LOGS);
+    setStorage(STORAGE_KEYS.EINVOICES, SAMPLE_DEMO_EINVOICES);
+    setStorage(STORAGE_KEYS.EWAYBILLS, SAMPLE_DEMO_EWAYBILLS);
     this.addAuditLog('RESTORE', 'System', 'demo_reset', 'Loaded Indian demo enterprise sample records on demand.');
     FirestoreAccountingService.persistEntireBundle(compId, {
       company: INITIAL_COMPANY,
@@ -1353,6 +1665,8 @@ export class AccountingService {
     setStorage(STORAGE_KEYS.TDS, []);
     setStorage(STORAGE_KEYS.BANK_ITEMS, []);
     setStorage(STORAGE_KEYS.JOURNALS, []);
+    setStorage(STORAGE_KEYS.EINVOICES, []);
+    setStorage(STORAGE_KEYS.EWAYBILLS, []);
     
     // Preserve company profile, settings, GSTIN, PAN, Bank Details
     const existingCompany = this.getCompany();

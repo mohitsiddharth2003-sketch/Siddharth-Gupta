@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Printer, Download, X, Building2, CheckCircle2 } from 'lucide-react';
 import { SalesInvoice, CompanyProfile, Language } from '../types/accounting';
+import { EInvoiceRecord } from '../types/einvoice';
 import { formatINR, numberToWordsINR } from '../utils/indianFormatters';
 import { translations } from '../utils/translations';
 
 interface InvoicePrintPreviewModalProps {
   invoice: SalesInvoice | null;
   company: CompanyProfile;
+  eInvoice?: EInvoiceRecord | null;
   isOpen: boolean;
   onClose: () => void;
   language: Language;
@@ -15,6 +18,7 @@ interface InvoicePrintPreviewModalProps {
 export const InvoicePrintPreviewModal: React.FC<InvoicePrintPreviewModalProps> = ({
   invoice,
   company,
+  eInvoice,
   isOpen,
   onClose,
   language,
@@ -134,6 +138,41 @@ export const InvoicePrintPreviewModal: React.FC<InvoicePrintPreviewModalProps> =
                 : 'TRIPLICATE FOR SUPPLIER'}
             </div>
           </div>
+
+          {/* Statutory E-Invoice IRN & Signed QR Code Banner */}
+          {eInvoice && eInvoice.status === 'GENERATED' && (
+            <div className="flex items-center justify-between p-3.5 mb-4 rounded-xl border border-violet-300 bg-violet-50/60 text-slate-800">
+              <div className="space-y-1 text-xs max-w-xl">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-violet-900 uppercase tracking-wide text-[11px]">
+                    Statutory E-Invoice (IRN Registered under Rule 48(4))
+                  </span>
+                  {eInvoice.isSandbox ? (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                      [SANDBOX DEMO]
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                      [LIVE STATUTORY]
+                    </span>
+                  )}
+                </div>
+                <div className="font-mono text-[10px] text-slate-900 break-all select-all">
+                  <strong className="text-slate-600">IRN: </strong>{eInvoice.irn}
+                </div>
+                <div className="text-[11px] text-slate-600 font-mono">
+                  <strong>Ack No: </strong>{eInvoice.ackNo} &nbsp;|&nbsp; <strong>Ack Timestamp: </strong>{new Date(eInvoice.ackDate).toLocaleString('en-IN')}
+                </div>
+              </div>
+              <div className="shrink-0 ml-4 p-1.5 bg-white rounded-lg border border-violet-200 shadow-2xs">
+                <QRCodeSVG
+                  value={eInvoice.signedQRCode || eInvoice.irn}
+                  size={68}
+                  level="M"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Supplier Details & Invoice Meta */}
           <div className="grid grid-cols-2 gap-4 border border-slate-300 p-4 rounded-xl mb-4 bg-slate-50/50">

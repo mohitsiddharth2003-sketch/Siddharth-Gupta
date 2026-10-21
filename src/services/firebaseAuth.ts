@@ -211,7 +211,21 @@ export class FirebaseAuthService {
     try {
       const userCred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
       if (userCred?.user) {
+        const u = userCred.user;
         console.log('[FirebaseAuth] Firebase sign-in successful for:', cleanEmail);
+        const session: AuthSession = {
+          token: await u.getIdToken().catch(() => `fb_sess_${u.uid}_${Date.now()}`),
+          userId: u.uid,
+          email: u.email || cleanEmail,
+          name: u.displayName || u.email?.split('@')[0] || 'Accounting Professional',
+          role: 'Admin',
+          companyId: 'comp_01',
+          companyName: 'Shree Ganesh Enterprises Pvt Ltd',
+          companyGstin: '27AABCS1429B1Z8',
+          loginTimestamp: Date.now(),
+        };
+        AuthService.setSession(session);
+        return { success: true, session };
       }
     } catch (fbErr: unknown) {
       const fbError = fbErr as { code?: string; message?: string };

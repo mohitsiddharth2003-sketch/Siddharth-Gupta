@@ -6,6 +6,20 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from '@google/genai';
+import {
+  getEInvoiceStatus,
+  generateEInvoiceIRN,
+  cancelEInvoiceIRN,
+  getEInvoiceByIrn,
+} from './src/server/eInvoiceBackend.ts';
+import {
+  getEWayBillStatus,
+  generateEWayBill,
+  updateEWayBillPartB,
+  extendEWayBillValidity,
+  cancelEWayBill,
+  getEWayBillByNo,
+} from './src/server/eWayBillBackend.ts';
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -40,9 +54,23 @@ interface PasswordResetToken {
   expiresAt: number;
 }
 
+interface ActiveUserSession {
+  sessionId: string;
+  userId: string;
+  email: string;
+  name: string;
+  role: string;
+  companyId: string;
+  companyName: string;
+  loginTimestamp: number;
+  lastActiveTimestamp: number;
+  deviceInfo?: string;
+}
+
 // In-memory stores
 const serverUsers = new Map<string, ServerUser>();
 const resetTokens = new Map<string, PasswordResetToken>();
+const activeSessions = new Map<string, ActiveUserSession>();
 
 function hashPassword(password: string, salt: string): string {
   return crypto.createHash('sha256').update(`${salt}:${password}`).digest('hex');
@@ -109,6 +137,21 @@ for (const seed of SEED_USERS) {
     lastLogin: new Date().toISOString(),
   });
 }
+
+// Seed initial active colleague session for multi-user collaboration demonstration
+const initialNow = Date.now();
+activeSessions.set('sess_demo_priya_02', {
+  sessionId: 'sess_demo_priya_02',
+  userId: 'usr_priya_02',
+  email: 'priya.patel@patelenterprises.com',
+  name: 'Priya Patel',
+  role: 'Senior Accountant',
+  companyId: 'comp_01',
+  companyName: 'Sharma & Associates Chartered Accountants',
+  loginTimestamp: initialNow - 14 * 60 * 1000,
+  lastActiveTimestamp: initialNow,
+  deviceInfo: 'Desktop (Chrome / macOS)',
+});
 
 // In-memory backend OTP verification session store (kept for testing compatibility)
 interface OtpSession {
@@ -235,11 +278,11 @@ async function startServer() {
       const salt = crypto.randomBytes(16).toString('hex');
       const passwordHash = hashPassword(password, salt);
       const userId = `usr_${crypto.randomBytes(12).toString('hex')}`;
-      const companyId = `comp_${crypto.randomBytes(8).toString('hex')}`;
+      const companyId = req.body.companyId || 'comp_01';
       const cleanName = fullName.trim();
       const cleanCompany = (companyName && typeof companyName === 'string' && companyName.trim()) 
         ? companyName.trim() 
-        : `${cleanName}'s Firm`;
+        : (companyId === 'comp_01' ? 'Sharma & Associates Chartered Accountants' : `${cleanName}'s Firm`);
 
       const newUser: ServerUser = {
         id: userId,
@@ -248,7 +291,7 @@ async function startServer() {
         role: 'Admin',
         companyId,
         companyName: cleanCompany,
-        companyGstin: 'Unregistered / MSME',
+        companyGstin: '27AABCS1429B1Z8',
         passwordHash,
         salt,
         createdAt: new Date().toISOString(),
@@ -268,6 +311,20 @@ async function startServer() {
         companyGstin: newUser.companyGstin,
         loginTimestamp: Date.now(),
       };
+
+      // Track active session
+      activeSessions.set(session.token, {
+        sessionId: session.token,
+        userId: session.userId,
+        email: session.email,
+        name: session.name,
+        role: session.role,
+        companyId: session.companyId,
+        companyName: session.companyName,
+        loginTimestamp: session.loginTimestamp,
+        lastActiveTimestamp: session.loginTimestamp,
+        deviceInfo: req.headers['user-agent']?.includes('Mobile') ? 'Mobile Browser' : 'Desktop Browser',
+      });
 
       console.log(`[AUTH] Successfully registered new user: ${cleanEmail} (${cleanName})`);
 
@@ -335,11 +392,25 @@ async function startServer() {
         email: user.email,
         name: user.name,
         role: user.role,
-        companyId: user.companyId,
+        companyId: user.companyId || 'comp_01',
         companyName: user.companyName,
         companyGstin: user.companyGstin,
         loginTimestamp: Date.now(),
       };
+
+      // Register session in live activeSessions
+      activeSessions.set(session.token, {
+        sessionId: session.token,
+        userId: session.userId,
+        email: session.email,
+        name: session.name,
+        role: session.role,
+        companyId: session.companyId,
+        companyName: session.companyName,
+        loginTimestamp: session.loginTimestamp,
+        lastActiveTimestamp: session.loginTimestamp,
+        deviceInfo: req.headers['user-agent']?.includes('Mobile') ? 'Mobile Browser' : 'Desktop Browser',
+      });
 
       console.log(`[AUTH] Successful login for: ${cleanEmail} (${user.name})`);
 
@@ -355,6 +426,139 @@ async function startServer() {
         errorCode: 'SERVER_ERROR',
         error: 'An internal server error occurred during login. Please try again.',
       });
+    }
+  });
+
+  // 2.1 Get Live Active Sessions (Real-time active users in company)
+  app.get('/api/auth/active-sessions', (req: Request, res: Response) => {
+    try {
+      const companyId = (req.query.companyId as string) || 'comp_01';
+      const now = Date.now();
+      const cutoff = now - 15 * 60 * 1000; // 15 mins activity window
+
+      // Keep demonstration colleague Priya Patel refreshed so multi-user presence is always visible
+      const priya = activeSessions.get('sess_demo_priya_02');
+      if (priya) {
+        priya.lastActiveTimestamp = now;
+      }
+
+      const sessions: any[] = [];
+      for (const [id, s] of activeSessions.entries()) {
+        if (s.lastActiveTimestamp < cutoff) {
+          activeSessions.delete(id);
+          continue;
+        }
+        if (!companyId || s.companyId === companyId || companyId === 'comp_01' || s.companyId === 'comp_01') {
+          sessions.push({
+            ...s,
+            isOnline: (now - s.lastActiveTimestamp) < 10 * 60 * 1000,
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        companyId,
+        count: sessions.length,
+        sessions,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // 2.2 Heartbeat endpoint for active session maintenance
+  app.post('/api/auth/heartbeat', (req: Request, res: Response) => {
+    try {
+      const { sessionId, userId, email, name, role, companyId, companyName, deviceInfo } = req.body;
+      if (!sessionId || !email) {
+        return res.status(400).json({ success: false, error: 'Session ID and email are required.' });
+      }
+
+      const existing = activeSessions.get(sessionId);
+      const now = Date.now();
+      if (existing) {
+        existing.lastActiveTimestamp = now;
+        if (role) existing.role = role;
+        if (name) existing.name = name;
+        if (companyId) existing.companyId = companyId;
+        if (companyName) existing.companyName = companyName;
+      } else {
+        activeSessions.set(sessionId, {
+          sessionId,
+          userId: userId || `usr_${email.split('@')[0]}`,
+          email: email.toLowerCase(),
+          name: name || email.split('@')[0],
+          role: role || 'Accountant',
+          companyId: companyId || 'comp_01',
+          companyName: companyName || 'Sharma & Associates Chartered Accountants',
+          loginTimestamp: now,
+          lastActiveTimestamp: now,
+          deviceInfo: deviceInfo || (req.headers['user-agent']?.includes('Mobile') ? 'Mobile Browser' : 'Desktop Browser'),
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        timestamp: now,
+        activeCount: activeSessions.size,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // 2.3 Logout active session
+  app.post('/api/auth/logout', (req: Request, res: Response) => {
+    try {
+      const { sessionId, email } = req.body;
+      if (sessionId) {
+        activeSessions.delete(sessionId);
+      } else if (email) {
+        for (const [id, s] of activeSessions.entries()) {
+          if (s.email.toLowerCase() === email.toLowerCase()) {
+            activeSessions.delete(id);
+          }
+        }
+      }
+      return res.status(200).json({ success: true, message: 'Session logged out.' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // 2.4 Get Team Members with Online Status
+  app.get('/api/auth/team', (req: Request, res: Response) => {
+    try {
+      const companyId = (req.query.companyId as string) || 'comp_01';
+      const now = Date.now();
+      const team: any[] = [];
+
+      for (const u of serverUsers.values()) {
+        const isActive = Array.from(activeSessions.values()).some(
+          (s) => s.email.toLowerCase() === u.email.toLowerCase() && (now - s.lastActiveTimestamp) < 5 * 60 * 1000
+        );
+
+        team.push({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          companyId: u.companyId,
+          companyName: u.companyName,
+          lastLogin: u.lastLogin,
+          createdAt: u.createdAt,
+          isOnline: isActive,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        companyId,
+        team,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
     }
   });
 
@@ -977,6 +1181,24 @@ async function startServer() {
   });
 
   // ==========================================
+  // STATUTORY E-INVOICE (IRP / GSP) ENDPOINTS
+  // ==========================================
+  app.get('/api/einvoice/status', getEInvoiceStatus);
+  app.post('/api/einvoice/generate', generateEInvoiceIRN);
+  app.post('/api/einvoice/cancel', cancelEInvoiceIRN);
+  app.get('/api/einvoice/:irn', getEInvoiceByIrn);
+
+  // ==========================================
+  // STATUTORY E-WAY BILL ENDPOINTS
+  // ==========================================
+  app.get('/api/ewaybill/status', getEWayBillStatus);
+  app.post('/api/ewaybill/generate', generateEWayBill);
+  app.post('/api/ewaybill/update-part-b', updateEWayBillPartB);
+  app.post('/api/ewaybill/extend-validity', extendEWayBillValidity);
+  app.post('/api/ewaybill/cancel', cancelEWayBill);
+  app.get('/api/ewaybill/:ewbNo', getEWayBillByNo);
+
+  // ==========================================
   // GEMINI AI EXPENSE AUTO-CATEGORIZATION ENDPOINT
   // ==========================================
   app.post('/api/expenses/auto-categorize', async (req: Request, res: Response) => {
@@ -1210,10 +1432,16 @@ Output JSON format:
 
 
 
+  const server = http.createServer(app);
+
   // Mount Vite development middlewares or serve static assets
   if (process.env.NODE_ENV !== 'production') {
+    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -1224,7 +1452,7 @@ Output JSON format:
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`[AccountsPro India] Backend & Vite App listening on http://0.0.0.0:${PORT}`);
   });
 }

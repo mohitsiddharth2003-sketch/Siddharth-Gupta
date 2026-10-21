@@ -1,1 +1,83 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --canvas-bg: #f8fafc;
+  --surface-bg: #ffffff;
+  --surface-hover: #f1f5f9;
+  --surface-subtle: #f8fafc;
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --navbar-bg: #ffffff;
+  --sidebar-bg: #ffffff;
+  --accent-blue: #1366D9;
+}
+
+.dark {
+  --canvas-bg: #0b0f19;
+  --surface-bg: #111827;
+  --surface-hover: #1f2937;
+  --surface-subtle: #161f30;
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --card-bg: #111827;
+  --card-border: #1e293b;
+  --navbar-bg: #111827;
+  --sidebar-bg: #0f172a;
+  --accent-blue: #3b82f6;
+}
+
+@theme {
+  --color-canvas: var(--canvas-bg);
+  --color-surface: var(--surface-bg);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-card: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-nav: var(--navbar-bg);
+  --color-side: var(--sidebar-bg);
+  --color-accent: var(--accent-blue);
+}
+
+html {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+body {
+  background-color: var(--canvas-bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* Dark mode custom scrollbars */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

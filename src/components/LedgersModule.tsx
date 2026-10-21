@@ -12,7 +12,36 @@ import {
   DollarSign,
   Scale,
   X,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  ArrowUpRight,
+  ArrowDownRight,
+  BarChart3,
+  Calendar,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  CreditCard,
+  ReceiptText,
+  HelpCircle,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  LineChart,
+  BarChart,
+  Line,
+  Bar,
+  Area,
+  AreaChart,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from 'recharts';
 import {
   Party,
   SalesInvoice,
@@ -27,6 +56,19 @@ import {
 import { formatINR } from '../utils/indianFormatters';
 import { translations } from '../utils/translations';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+
+export interface MonthlyTrendDataPoint {
+  monthKey: string;
+  month: string;
+  balance: number;
+  balanceType: BalanceType;
+  signedBalance: number;
+  payments: number;
+  invoiced: number;
+  debit: number;
+  credit: number;
+  txnCount: number;
+}
 
 interface LedgersModuleProps {
   parties: Party[];
@@ -60,6 +102,10 @@ export const LedgersModule: React.FC<LedgersModuleProps> = ({
     initialPartyId || (parties.length > 0 ? parties[0].id : '')
   );
 
+  // Visualization mode and collapse states
+  const [chartViewMode, setChartViewMode] = useState<'combined' | 'balance' | 'payments'>('combined');
+  const [isChartExpanded, setIsChartExpanded] = useState<boolean>(true);
+
   // Journal modal state
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
   const [journalFormData, setJournalFormData] = useState<Partial<JournalEntry>>({
@@ -77,61 +123,59 @@ export const LedgersModule: React.FC<LedgersModuleProps> = ({
     return parties.find((p) => p.id === selectedPartyId) || parties[0];
   }, [parties, selectedPartyId]);
 
-  // Generate Party Ledger with running balance
+  // Generate Party Ledger with chronologically sorted transactions and precise running balance
   const partyLedger = useMemo(() => {
     if (!currentParty) return [];
 
-    const txns: LedgerTransaction[] = [];
-    let runningBalance = currentParty.openingBalance;
-    let balanceType: BalanceType = currentParty.openingBalanceType;
+    const rawTxns: {
+      date: string;
+      type: LedgerTransaction['type'];
+      referenceNo: string;
+      narration: string;
+      debit: number;
+      credit: number;
+      order: number;
+      isPayment?: boolean;
+      isInvoiced?: boolean;
+    }[] = [];
 
     // Opening Balance
-    txns.push({
-      date: currentParty.createdAt.split('T')[0] || '2026-04-01',
+    rawTxns.push({
+      date: currentParty.createdAt?.split('T')[0] || '2026-04-01',
       type: 'Opening Balance',
       referenceNo: 'OPENING',
       narration: 'Opening balance brought forward',
       debit: currentParty.openingBalanceType === 'Dr' ? currentParty.openingBalance : 0,
       credit: currentParty.openingBalanceType === 'Cr' ? currentParty.openingBalance : 0,
-      balance: currentParty.openingBalance,
-      balanceType: currentParty.openingBalanceType,
+      order: 0,
     });
 
     // Invoices for customer
     sales
       .filter((s) => s.customerId === currentParty.id && s.status !== 'Cancelled')
       .forEach((s) => {
-        // Sales Invoice increases Dr
-        let net = (balanceType === 'Dr' ? runningBalance : -runningBalance) + s.grandTotal;
-        runningBalance = Math.abs(net);
-        balanceType = net >= 0 ? 'Dr' : 'Cr';
-
-        txns.push({
+        rawTxns.push({
           date: s.invoiceDate,
           type: 'Sales Invoice',
           referenceNo: s.invoiceNumber,
           narration: `Tax Invoice SGE/26-27 (${s.items.length} items)`,
           debit: s.grandTotal,
           credit: 0,
-          balance: runningBalance,
-          balanceType,
+          order: 1,
+          isInvoiced: true,
         });
 
         // Any payments received against this invoice
-        s.payments.forEach((p) => {
-          net = (balanceType === 'Dr' ? runningBalance : -runningBalance) - p.amount;
-          runningBalance = Math.abs(net);
-          balanceType = net >= 0 ? 'Dr' : 'Cr';
-
-          txns.push({
+        s.payments?.forEach((p) => {
+          rawTxns.push({
             date: p.date,
             type: 'Payment Received',
             referenceNo: p.referenceNo || 'RECEIPT',
             narration: `Remittance via ${p.paymentMode}`,
             debit: 0,
             credit: p.amount,
-            balance: runningBalance,
-            balanceType,
+            order: 2,
+            isPayment: true,
           });
         });
       });
@@ -140,42 +184,200 @@ export const LedgersModule: React.FC<LedgersModuleProps> = ({
     purchases
       .filter((b) => b.vendorId === currentParty.id)
       .forEach((b) => {
-        // Bill increases Cr
-        let net = (balanceType === 'Dr' ? runningBalance : -runningBalance) - b.grandTotal;
-        runningBalance = Math.abs(net);
-        balanceType = net >= 0 ? 'Dr' : 'Cr';
-
-        txns.push({
+        rawTxns.push({
           date: b.billDate,
           type: 'Purchase Bill',
-          referenceNo: b.vendorBillNumber,
+          referenceNo: b.vendorBillNumber || b.billNumber,
           narration: `Vendor inward supply bill ${b.billNumber}`,
           debit: 0,
           credit: b.grandTotal,
-          balance: runningBalance,
-          balanceType,
+          order: 1,
+          isInvoiced: true,
         });
 
         if (b.amountPaid > 0) {
-          net = (balanceType === 'Dr' ? runningBalance : -runningBalance) + b.amountPaid;
-          runningBalance = Math.abs(net);
-          balanceType = net >= 0 ? 'Dr' : 'Cr';
-
-          txns.push({
+          rawTxns.push({
             date: b.billDate,
             type: 'Payment Made',
             referenceNo: 'PMT_DEBIT',
             narration: 'Settlement payment to supplier',
             debit: b.amountPaid,
             credit: 0,
-            balance: runningBalance,
-            balanceType,
+            order: 2,
+            isPayment: true,
           });
         }
       });
 
-    return txns;
+    // Sort chronologically by date then order
+    rawTxns.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.order - b.order;
+    });
+
+    // Calculate running balance
+    let net = 0;
+    const finalTxns: LedgerTransaction[] = [];
+
+    rawTxns.forEach((item) => {
+      net += item.debit - item.credit;
+      const balance = Math.abs(net);
+      const balanceType: BalanceType = net >= 0 ? 'Dr' : 'Cr';
+
+      finalTxns.push({
+        date: item.date,
+        type: item.type,
+        referenceNo: item.referenceNo,
+        narration: item.narration,
+        debit: item.debit,
+        credit: item.credit,
+        balance,
+        balanceType,
+      });
+    });
+
+    return finalTxns;
   }, [currentParty, sales, purchases]);
+
+  // Compute monthly trend data of party balance and payment history for Recharts
+  const monthlyTrendData = useMemo(() => {
+    if (!currentParty) return [];
+
+    // Financial Year 2026-27 default months
+    const defaultMonths = [
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+      '2026-10',
+      '2026-11',
+      '2026-12',
+      '2027-01',
+      '2027-02',
+      '2027-03',
+    ];
+
+    // Collect all unique months from ledger transactions
+    const monthsSet = new Set<string>(defaultMonths);
+    partyLedger.forEach((t) => {
+      if (t.date && t.date.length >= 7) {
+        monthsSet.add(t.date.slice(0, 7));
+      }
+    });
+
+    const sortedMonthKeys = Array.from(monthsSet).sort();
+
+    // Map monthKey to readable label e.g. "Apr '26"
+    const formatMonthKey = (key: string) => {
+      const parts = key.split('-');
+      if (parts.length >= 2) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const date = new Date(year, month - 1, 1);
+        return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+      }
+      return key;
+    };
+
+    let currentBalance = currentParty.openingBalance;
+    let currentBalanceType: BalanceType = currentParty.openingBalanceType;
+
+    const points: MonthlyTrendDataPoint[] = [];
+
+    sortedMonthKeys.forEach((key) => {
+      const monthTxns = partyLedger.filter((t) => t.date.startsWith(key));
+
+      let monthlyPayments = 0;
+      let monthlyInvoiced = 0;
+      let monthlyDebit = 0;
+      let monthlyCredit = 0;
+
+      monthTxns.forEach((t) => {
+        monthlyDebit += t.debit;
+        monthlyCredit += t.credit;
+
+        if (t.type === 'Payment Received' || t.type === 'Payment Made') {
+          monthlyPayments += t.debit > 0 ? t.debit : t.credit;
+        } else if (t.type === 'Sales Invoice' || t.type === 'Purchase Bill') {
+          monthlyInvoiced += t.debit > 0 ? t.debit : t.credit;
+        }
+      });
+
+      if (monthTxns.length > 0) {
+        const lastTxn = monthTxns[monthTxns.length - 1];
+        currentBalance = lastTxn.balance;
+        currentBalanceType = lastTxn.balanceType;
+      }
+
+      points.push({
+        monthKey: key,
+        month: formatMonthKey(key),
+        balance: currentBalance,
+        balanceType: currentBalanceType,
+        signedBalance: currentBalanceType === 'Dr' ? currentBalance : -currentBalance,
+        payments: monthlyPayments,
+        invoiced: monthlyInvoiced,
+        debit: monthlyDebit,
+        credit: monthlyCredit,
+        txnCount: monthTxns.length,
+      });
+    });
+
+    return points;
+  }, [currentParty, partyLedger]);
+
+  // Aggregate Key Performance Metrics for this selected party
+  const trendSummary = useMemo(() => {
+    if (!currentParty || partyLedger.length === 0) {
+      return {
+        closingBalance: 0,
+        closingType: 'Dr' as BalanceType,
+        totalPayments: 0,
+        totalInvoiced: 0,
+        clearanceRatio: 0,
+        netDebit: 0,
+        netCredit: 0,
+        paymentCount: 0,
+        invoiceCount: 0,
+      };
+    }
+
+    const last = partyLedger[partyLedger.length - 1];
+    let totalPayments = 0;
+    let totalInvoiced = 0;
+    let netDebit = 0;
+    let netCredit = 0;
+    let paymentCount = 0;
+    let invoiceCount = 0;
+
+    partyLedger.forEach((t) => {
+      netDebit += t.debit;
+      netCredit += t.credit;
+      if (t.type === 'Payment Received' || t.type === 'Payment Made') {
+        totalPayments += t.debit > 0 ? t.debit : t.credit;
+        paymentCount++;
+      } else if (t.type === 'Sales Invoice' || t.type === 'Purchase Bill') {
+        totalInvoiced += t.debit > 0 ? t.debit : t.credit;
+        invoiceCount++;
+      }
+    });
+
+    const clearanceRatio = totalInvoiced > 0 ? Math.min(100, Math.round((totalPayments / totalInvoiced) * 100)) : 100;
+
+    return {
+      closingBalance: last.balance,
+      closingType: last.balanceType,
+      totalPayments,
+      totalInvoiced,
+      clearanceRatio,
+      netDebit,
+      netCredit,
+      paymentCount,
+      invoiceCount,
+    };
+  }, [currentParty, partyLedger]);
 
   // Export ledger CSV
   const handleExportPartyLedgerCSV = () => {
@@ -358,6 +560,74 @@ export const LedgersModule: React.FC<LedgersModuleProps> = ({
     });
   };
 
+  // Reusable custom tooltip for Recharts monthly trend visualization
+  const renderCustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload as MonthlyTrendDataPoint;
+      if (!d) return null;
+      return (
+        <div className="bg-white/95 backdrop-blur-md p-3.5 rounded-xl shadow-xl border border-slate-200 text-xs min-w-[220px]">
+          <div className="font-bold text-slate-800 border-b border-slate-100 pb-1.5 mb-2 flex items-center justify-between">
+            <span className="flex items-center space-x-1">
+              <Calendar className="w-3.5 h-3.5 text-[#1366D9]" />
+              <span>{d.month}</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {d.txnCount} {d.txnCount === 1 ? 'txn' : 'txns'}
+            </span>
+          </div>
+
+          <div className="space-y-1.5 font-medium">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500 flex items-center space-x-1">
+                <span className="w-2 h-2 rounded-full bg-[#1366D9]" />
+                <span>Running Balance:</span>
+              </span>
+              <span className="font-mono font-bold text-slate-900">
+                {formatINR(d.balance)}{' '}
+                <span
+                  className={`text-[9px] px-1 py-0.2 rounded font-bold ${
+                    d.balanceType === 'Dr'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {d.balanceType}
+                </span>
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500 flex items-center space-x-1">
+                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                <span>Payments Cleared:</span>
+              </span>
+              <span className="font-mono font-bold text-emerald-700">
+                {formatINR(d.payments)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500 flex items-center space-x-1">
+                <span className="w-2 h-2 rounded-full bg-[#8B5CF6]" />
+                <span>Invoiced / Billed:</span>
+              </span>
+              <span className="font-mono font-bold text-purple-700">
+                {formatINR(d.invoiced)}
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+            <span>Debit: {formatINR(d.debit)}</span>
+            <span>Credit: {formatINR(d.credit)}</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-5">
       {/* Top Banner */}
@@ -497,6 +767,370 @@ export const LedgersModule: React.FC<LedgersModuleProps> = ({
               </div>
             )}
           </div>
+
+          {/* ========================================================================= */}
+          {/* DATA VISUALIZATION SECTION: RECHARTS MONTHLY BALANCE & PAYMENT TREND      */}
+          {/* ========================================================================= */}
+          {currentParty && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              {/* Header with Title and Mode Switchers */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-start sm:items-center space-x-3">
+                  <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[#1366D9] shrink-0">
+                    <TrendingUp className="w-5 h-5 text-[#1366D9]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <h2 className="font-black text-sm sm:text-base text-slate-900 tracking-tight">
+                        {language === 'hi'
+                          ? `मासिक बैलेंस एवं भुगतान रुझान: ${currentParty.name}`
+                          : `Monthly Balance & Payment Trend: ${currentParty.name}`}
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        {currentParty.type}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {language === 'hi'
+                        ? 'चयनित लेज़र का महीना-वार रनिंग बैलेंस और भुगतान इतिहास (Recharts विज़ुअलाइज़ेशन)'
+                        : "Visual month-over-month trajectory of party's closing balance and payment clearance velocity"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right: Chart Controls & View Modes */}
+                <div className="flex items-center space-x-2 self-start md:self-auto shrink-0">
+                  {/* Mode Toggles */}
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setChartViewMode('combined')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        chartViewMode === 'combined'
+                          ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {language === 'hi' ? 'संयुक्त रुझान' : 'Combined'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartViewMode('balance')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        chartViewMode === 'balance'
+                          ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {language === 'hi' ? 'बैलेंस रेखा' : 'Balance Trend'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartViewMode('payments')}
+                      className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        chartViewMode === 'payments'
+                          ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {language === 'hi' ? 'भुगतान इतिहास' : 'Payments'}
+                    </button>
+                  </div>
+
+                  {/* Collapse / Expand Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsChartExpanded(!isChartExpanded)}
+                    title={isChartExpanded ? 'Collapse Chart' : 'Expand Chart'}
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                  >
+                    {isChartExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {isChartExpanded && (
+                <div className="p-4 sm:p-5 space-y-5 animate-in fade-in duration-200">
+                  {/* 4 Key Performance Metric Summary Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* Card 1: Closing Ledger Balance */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>{language === 'hi' ? 'अंतिम लेज़र बैलेंस' : 'Current Balance'}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                            trendSummary.closingType === 'Dr'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {trendSummary.closingType}
+                        </span>
+                      </div>
+                      <div className="mt-1.5">
+                        <div className="text-lg font-black text-slate-900 font-mono">
+                          {formatINR(trendSummary.closingBalance)}{' '}
+                          <span className="text-xs font-bold text-slate-500">{trendSummary.closingType}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {trendSummary.closingType === 'Dr'
+                            ? 'Receivable from Party (Asset)'
+                            : 'Payable to Party (Liability)'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Total Payments Cleared */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>{language === 'hi' ? 'कुल भुगतान' : 'Payments Settled'}</span>
+                        <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                      </div>
+                      <div className="mt-1.5">
+                        <div className="text-lg font-black text-emerald-700 font-mono">
+                          {formatINR(trendSummary.totalPayments)}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          Across {trendSummary.paymentCount} {trendSummary.paymentCount === 1 ? 'settlement' : 'settlements'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Total Invoices / Billed */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>{language === 'hi' ? 'कुल चालान / बिल' : 'Total Invoiced'}</span>
+                        <ReceiptText className="w-3.5 h-3.5 text-purple-600" />
+                      </div>
+                      <div className="mt-1.5">
+                        <div className="text-lg font-black text-purple-700 font-mono">
+                          {formatINR(trendSummary.totalInvoiced)}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          Across {trendSummary.invoiceCount} {trendSummary.invoiceCount === 1 ? 'bill/invoice' : 'bills/invoices'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card 4: Clearance Ratio Velocity */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>{language === 'hi' ? 'निपटान दर (Clearance)' : 'Clearance Ratio'}</span>
+                        <Activity className="w-3.5 h-3.5 text-blue-600" />
+                      </div>
+                      <div className="mt-1.5">
+                        <div className="text-lg font-black text-blue-700 font-mono">
+                          {trendSummary.clearanceRatio}%
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1 overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${Math.min(100, trendSummary.clearanceRatio)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recharts Data Visualization Chart */}
+                  <div className="pt-2">
+                    <div className="h-72 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {chartViewMode === 'balance' ? (
+                          /* Area Chart for Pure Balance Trajectory */
+                          <AreaChart
+                            data={monthlyTrendData}
+                            margin={{ top: 10, right: 15, left: 10, bottom: 5 }}
+                          >
+                            <defs>
+                              <linearGradient id="partyBalanceGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#1366D9" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#1366D9" stopOpacity={0.0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                            <XAxis
+                              dataKey="month"
+                              stroke="#94A3B8"
+                              fontSize={11}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E2E8F0' }}
+                            />
+                            <YAxis
+                              stroke="#94A3B8"
+                              fontSize={11}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E2E8F0' }}
+                              tickFormatter={(v) => {
+                                if (v === 0) return '₹0';
+                                if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+                                if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+                                if (v >= 1000) return `₹${(v / 1000).toFixed(0)}k`;
+                                return `₹${v}`;
+                              }}
+                            />
+                            <Tooltip content={renderCustomTooltip} />
+                            <Area
+                              type="monotone"
+                              dataKey="balance"
+                              name="Running Balance (₹)"
+                              stroke="#1366D9"
+                              strokeWidth={3}
+                              fillOpacity={1}
+                              fill="url(#partyBalanceGrad)"
+                              dot={{ r: 4, fill: '#1366D9', stroke: '#FFFFFF', strokeWidth: 1.5 }}
+                              activeDot={{ r: 7, fill: '#1366D9' }}
+                            />
+                          </AreaChart>
+                        ) : chartViewMode === 'payments' ? (
+                          /* Bar Chart for Payment History & Settlement Inflows */
+                          <BarChart
+                            data={monthlyTrendData}
+                            margin={{ top: 10, right: 15, left: 10, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                            <XAxis
+                              dataKey="month"
+                              stroke="#94A3B8"
+                              fontSize={11}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E2E8F0' }}
+                            />
+                            <YAxis
+                              stroke="#94A3B8"
+                              fontSize={11}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E2E8F0' }}
+                              tickFormatter={(v) => {
+                                if (v === 0) return '₹0';
+                                if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+                                if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+                                if (v >= 1000) return `₹${(v / 1000).toFixed(0)}k`;
+                                return `₹${v}`;
+                              }}
+                            />
+                            <Tooltip content={renderCustomTooltip} />
+                            <Legend
+                              wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+                              formatter={(val) =>
+                                val === 'payments' ? 'Payments Cleared (₹)' : 'Invoices Billed (₹)'
+                              }
+                            />
+                            <Bar
+                              dataKey="payments"
+                              name="payments"
+                              fill="#10B981"
+                              radius={[6, 6, 0, 0]}
+                              maxBarSize={38}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="invoiced"
+                              name="invoiced"
+                              stroke="#8B5CF6"
+                              strokeWidth={2.5}
+                              dot={{ r: 4, fill: '#8B5CF6' }}
+                            />
+                          </BarChart>
+                        ) : (
+                          /* Combined Composed Chart (Line of Balance + Bars of Payments + Line of Invoiced) */
+                          <ComposedChart
+                            data={monthlyTrendData}
+                            margin={{ top: 10, right: 15, left: 10, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                            <XAxis
+                              dataKey="month"
+                              stroke="#94A3B8"
+                              fontSize={11}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E2E8F0' }}
+                            />
+                            <YAxis
+                              stroke="#94A3B8"
+                              fontSize={11}
+                              tickLine={false}
+                              axisLine={{ stroke: '#E2E8F0' }}
+                              tickFormatter={(v) => {
+                                if (v === 0) return '₹0';
+                                if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+                                if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+                                if (v >= 1000) return `₹${(v / 1000).toFixed(0)}k`;
+                                return `₹${v}`;
+                              }}
+                            />
+                            <Tooltip content={renderCustomTooltip} />
+                            <Legend
+                              wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+                              formatter={(val) => {
+                                if (val === 'balance') return 'Running Balance Line (Closing ₹)';
+                                if (val === 'payments') return 'Payments Settled (₹)';
+                                if (val === 'invoiced') return 'Invoiced / Billed Volume (₹)';
+                                return val;
+                              }}
+                            />
+                            {/* Monthly Payments Settled Bar */}
+                            <Bar
+                              dataKey="payments"
+                              name="payments"
+                              fill="#10B981"
+                              radius={[4, 4, 0, 0]}
+                              maxBarSize={32}
+                            />
+                            {/* Invoiced / Billed Volume Line */}
+                            <Line
+                              type="monotone"
+                              dataKey="invoiced"
+                              name="invoiced"
+                              stroke="#8B5CF6"
+                              strokeDasharray="4 4"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                            {/* Running Balance Trend Line */}
+                            <Line
+                              type="monotone"
+                              dataKey="balance"
+                              name="balance"
+                              stroke="#1366D9"
+                              strokeWidth={3}
+                              dot={{ r: 4, fill: '#1366D9', stroke: '#FFFFFF', strokeWidth: 1.5 }}
+                              activeDot={{ r: 7, fill: '#1366D9' }}
+                            />
+                          </ComposedChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Chart Footer Explanatory Legend */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-2">
+                      <div className="flex items-center space-x-4 flex-wrap gap-y-1">
+                        <span className="flex items-center space-x-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#1366D9]" />
+                          <span className="font-semibold text-slate-700">Blue Line:</span>
+                          <span>Month-End Closing Balance (₹)</span>
+                        </span>
+                        <span className="flex items-center space-x-1.5">
+                          <span className="w-2.5 h-2.5 rounded-sm bg-[#10B981]" />
+                          <span className="font-semibold text-slate-700">Green Bar:</span>
+                          <span>Payment Inflows & Settlements (₹)</span>
+                        </span>
+                        <span className="flex items-center space-x-1.5">
+                          <span className="w-3 h-0.5 border-t-2 border-dashed border-[#8B5CF6]" />
+                          <span className="font-semibold text-slate-700">Purple Dashed:</span>
+                          <span>Invoiced / Billed Amount (₹)</span>
+                        </span>
+                      </div>
+
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Powered by Recharts v3
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Statement Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">

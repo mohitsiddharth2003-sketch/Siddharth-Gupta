@@ -38,11 +38,17 @@ import { SettingsModule } from './components/SettingsModule';
 import { WorkspaceModule } from './components/WorkspaceModule';
 import { SafeDataResetModal } from './components/SafeDataResetModal';
 import { BackupReminderModal } from './components/BackupReminderModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { translations } from './utils/translations';
-import { CheckCircle2, AlertCircle, AlertTriangle, Download, Clock, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Download, Clock, X, Keyboard } from 'lucide-react';
 import { SystemAuditModal } from './components/SystemAuditModal';
 import { FirebaseSetupGuideModal } from './components/FirebaseSetupGuideModal';
-import { OfflineIndicator } from './components/OfflineIndicator';
+import { EInvoiceRecord } from './types/einvoice';
+import { EWayBillRecord } from './types/ewaybill';
+import { EInvoiceModule } from './components/EInvoiceModule';
+import { EWayBillModule } from './components/EWayBillModule';
+import { PresenceService } from './services/presenceService';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -83,6 +89,18 @@ export default function App() {
       });
   }, []);
 
+  // Live Multi-User Presence & Session Synchronization
+  useEffect(() => {
+    if (currentUser) {
+      PresenceService.start(currentUser);
+    } else {
+      PresenceService.stop();
+    }
+    return () => {
+      PresenceService.stop();
+    };
+  }, [currentUser]);
+
   // App data state
   const [company, setCompany] = useState<CompanyProfile>(AccountingService.getCompany());
   const [parties, setParties] = useState<Party[]>(AccountingService.getParties());
@@ -93,6 +111,13 @@ export default function App() {
   const [bankItems, setBankItems] = useState<BankStatementItem[]>(AccountingService.getBankItems());
   const [journals, setJournals] = useState<JournalEntry[]>(AccountingService.getJournals());
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(AccountingService.getAuditLogs());
+  const [eInvoices, setEInvoices] = useState<EInvoiceRecord[]>(() => AccountingService.getEInvoices());
+  const [eWayBills, setEWayBills] = useState<EWayBillRecord[]>(() => AccountingService.getEWayBills());
+
+  // Deep linking and preselection states between Invoices, E-Invoices, and E-Way Bills
+  const [preselectedEInvoiceId, setPreselectedEInvoiceId] = useState<string | undefined>(undefined);
+  const [preselectedEWayBillInvoiceId, setPreselectedEWayBillInvoiceId] = useState<string | undefined>(undefined);
+  const [preselectedEWayBillIrn, setPreselectedEWayBillIrn] = useState<string | undefined>(undefined);
 
   // Modal open states for quick triggers
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -103,6 +128,7 @@ export default function App() {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isCloudGuideOpen, setIsCloudGuideOpen] = useState(false);
   const [isSafeResetModalOpen, setIsSafeResetModalOpen] = useState(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [selectedLedgerPartyId, setSelectedLedgerPartyId] = useState<string | undefined>(undefined);
 
   // 7-day recurring backup reminder state
@@ -155,6 +181,8 @@ export default function App() {
     setBankItems(AccountingService.getBankItems());
     setJournals(AccountingService.getJournals());
     setAuditLogs(AccountingService.getAuditLogs());
+    setEInvoices(AccountingService.getEInvoices());
+    setEWayBills(AccountingService.getEWayBills());
     setBackupStatus(AccountingService.getBackupDueStatus());
   };
 
@@ -181,6 +209,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (currentUser) {
+      await PresenceService.logoutSession(currentUser.token, currentUser.email);
+    }
     await FirebaseAuthService.logout();
     setCurrentUser(null);
     showToast('Signed out successfully.');
@@ -367,6 +398,228 @@ export default function App() {
     setActiveModule('ledgers');
   };
 
+  // E-Invoice Handlers
+  const handleSaveEInvoice = (rec: EInvoiceRecord) => {
+    AccountingService.saveEInvoice(rec);
+    refreshAllState();
+    showToast(
+      language === 'hi'
+        ? 'ई-चालान आईआरएन सुरक्षित रूप से दर्ज किया गया।'
+        : 'E-Invoice IRN registered successfully.'
+    );
+  };
+
+  const handleCancelEInvoice = (irn: string, reason: string, remarks: string) => {
+    AccountingService.cancelEInvoice(irn, reason, remarks);
+    refreshAllState();
+    showToast(
+      language === 'hi'
+        ? 'ई-चालान रद्द कर दिया गया।'
+        : 'E-Invoice cancelled with audit trail.'
+    );
+  };
+
+  // E-Way Bill Handlers
+  const handleSaveEWayBill = (rec: EWayBillRecord) => {
+    AccountingService.saveEWayBill(rec);
+    refreshAllState();
+    showToast(
+      language === 'hi'
+        ? 'ई-वे बिल सफलतापूर्वक उत्पन्न व सहेजा गया।'
+        : 'E-Way Bill generated and saved.'
+    );
+  };
+
+  const handleUpdatePartB = (
+    ewbNo: string,
+    update: {
+      vehicleNo: string;
+      fromPlace: string;
+      fromState: string;
+      reasonCode: '1' | '2' | '3' | '4';
+      reasonRemarks: string;
+      transDocNo?: string;
+      transDocDate?: string;
+    }
+  ) => {
+    AccountingService.updateEWayBillPartB(ewbNo, update);
+    refreshAllState();
+    showToast('E-Way Bill Part-B vehicle details updated.');
+  };
+
+  const handleExtendValidity = (
+    ewbNo: string,
+    ext: {
+      remainingDistance: number;
+      currentPlace: string;
+      currentPincode?: string;
+      reasonCode: '1' | '2' | '3' | '4' | '5';
+      remarks: string;
+    }
+  ) => {
+    AccountingService.extendEWayBillValidity(ewbNo, ext);
+    refreshAllState();
+    showToast('E-Way Bill validity period extended.');
+  };
+
+  const handleCancelEWayBill = (ewbNo: string, reason: string, remarks: string) => {
+    AccountingService.cancelEWayBill(ewbNo, reason, remarks);
+    refreshAllState();
+    showToast('E-Way Bill cancelled with statutory audit log.');
+  };
+
+  const handleNavigateToEInvoice = (invoiceId?: string) => {
+    setPreselectedEInvoiceId(invoiceId);
+    setActiveModule('eInvoice');
+  };
+
+  const handleNavigateToEWayBill = (invoiceId?: string, irn?: string) => {
+    setPreselectedEWayBillInvoiceId(invoiceId);
+    setPreselectedEWayBillIrn(irn);
+    setActiveModule('eWayBill');
+  };
+
+  // Global Accountant Keyboard Shortcuts Hook (Ctrl+N, Ctrl+S, Ctrl+P, etc.)
+  useKeyboardShortcuts({
+    enabled: Boolean(currentUser),
+    onNewInvoice: () => {
+      setActiveModule('salesInvoices');
+      setIsInvoiceModalOpen(true);
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: नया बिक्री चालान (Ctrl + N)'
+          : '⚡ Shortcut: New Sales Invoice (Ctrl + N)'
+      );
+    },
+    onNewPurchase: () => {
+      setActiveModule('purchaseBills');
+      setIsPurchaseModalOpen(true);
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: नया खरीद बिल (Ctrl + B)'
+          : '⚡ Shortcut: New Purchase Bill (Ctrl + B)'
+      );
+    },
+    onNewExpense: () => {
+      setActiveModule('expenses');
+      setIsExpenseModalOpen(true);
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: नया खर्च वाउचर (Ctrl + E)'
+          : '⚡ Shortcut: New Expense Voucher (Ctrl + E)'
+      );
+    },
+    onOpenParties: () => {
+      setActiveModule('parties');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: पार्टी मास्टर (Ctrl + P)'
+          : '⚡ Shortcut: Parties Master Directory (Ctrl + P)'
+      );
+    },
+    onOpenDashboard: () => {
+      setActiveModule('dashboard');
+      showToast(
+        language === 'hi' ? '⚡ शॉर्टकट: डैशबोर्ड (Ctrl + D)' : '⚡ Shortcut: Dashboard (Ctrl + D)'
+      );
+    },
+    onOpenSales: () => {
+      setActiveModule('salesInvoices');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: बिक्री चालान सूची (Ctrl + I)'
+          : '⚡ Shortcut: Sales Invoices List (Ctrl + I)'
+      );
+    },
+    onOpenGST: () => {
+      setActiveModule('gstManager');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: जीएसटी प्रबंधक (Ctrl + G)'
+          : '⚡ Shortcut: GST Manager (Ctrl + G)'
+      );
+    },
+    onOpenTDS: () => {
+      setActiveModule('tdsManager');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: टीडीएस प्रबंधक (Ctrl + T)'
+          : '⚡ Shortcut: TDS Compliance (Ctrl + T)'
+      );
+    },
+    onOpenBank: () => {
+      setActiveModule('bankReconciliation');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: बैंक समाधान (Ctrl + K)'
+          : '⚡ Shortcut: Bank Reconciliation (Ctrl + K)'
+      );
+    },
+    onOpenLedgers: () => {
+      setActiveModule('ledgers');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: खाता बही व जर्नल (Ctrl + J)'
+          : '⚡ Shortcut: Ledgers & Journals (Ctrl + J)'
+      );
+    },
+    onOpenReports: () => {
+      setActiveModule('reports');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: वित्तीय रिपोर्ट (Ctrl + R)'
+          : '⚡ Shortcut: Financial Reports (Ctrl + R)'
+      );
+    },
+    onOpenEInvoice: () => {
+      setActiveModule('eInvoice');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: ई-चालान पोर्टल (Ctrl + Shift + E)'
+          : '⚡ Shortcut: E-Invoice Portal (Ctrl + Shift + E)'
+      );
+    },
+    onOpenEWayBill: () => {
+      setActiveModule('eWayBill');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: ई-वे बिल पोर्टल (Ctrl + Shift + W)'
+          : '⚡ Shortcut: E-Way Bill Portal (Ctrl + Shift + W)'
+      );
+    },
+    onOpenSettings: () => {
+      setActiveModule('settings');
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: सेटिंग्स (Ctrl + M)'
+          : '⚡ Shortcut: Company Settings (Ctrl + M)'
+      );
+    },
+    onSave: () => {
+      showToast(
+        language === 'hi'
+          ? '⚡ शॉर्टकट: प्रपत्र सहेजा जा रहा है (Ctrl + S)...'
+          : '⚡ Shortcut: Submitting active form (Ctrl + S)...'
+      );
+    },
+    onOpenShortcuts: () => {
+      setIsShortcutsModalOpen((prev) => !prev);
+    },
+    onBackup: handleBackup,
+    onEscape: () => {
+      setIsShortcutsModalOpen(false);
+      setIsInvoiceModalOpen(false);
+      setIsPurchaseModalOpen(false);
+      setIsExpenseModalOpen(false);
+      setIsPartyModalOpen(false);
+      setIsTdsModalOpen(false);
+      setIsAuditModalOpen(false);
+      setIsCloudGuideOpen(false);
+      setIsSafeResetModalOpen(false);
+      setIsBackupReminderOpen(false);
+    },
+  });
+
   // Gatekeeper: If user is not authenticated, show modern Login Page exclusively
   if (!currentUser) {
     return (
@@ -386,6 +639,8 @@ export default function App() {
     parties: parties.length,
     tdsPending: tdsRecords.filter((t) => t.status === 'Pending').length,
     bankUnmatched: bankItems.filter((b) => !b.matched).length,
+    eInvoices: eInvoices.filter((i) => i.status === 'GENERATED').length,
+    eWayBills: eWayBills.filter((w) => w.status === 'ACT').length,
   };
 
   return (
@@ -407,6 +662,10 @@ export default function App() {
         isCloudSyncing={isCloudSyncing}
         isBackupOverdue={backupStatus.isOverdue}
         onOpenBackupReminder={() => setIsBackupReminderOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+        onSwitchUser={handleLoginSuccess}
+        activeModule={activeModule}
+        onNavigate={setActiveModule}
       />
 
       {/* 7-Day Overdue Recurring Backup Notification Banner */}
@@ -494,6 +753,8 @@ export default function App() {
               expenses={expenses}
               parties={parties}
               tdsRecords={tdsRecords}
+              eInvoices={eInvoices}
+              eWayBills={eWayBills}
               language={language}
               onNavigate={setActiveModule}
               onOpenNewInvoice={() => {
@@ -522,11 +783,44 @@ export default function App() {
               sales={sales}
               parties={parties}
               company={company}
+              eInvoices={eInvoices}
+              eWayBills={eWayBills}
               language={language}
               onSaveInvoice={handleSaveInvoice}
               onDeleteInvoice={handleDeleteInvoice}
+              onNavigateToEInvoice={handleNavigateToEInvoice}
+              onNavigateToEWayBill={(invId) => handleNavigateToEWayBill(invId)}
               isCreateOpen={isInvoiceModalOpen}
               setIsCreateOpen={setIsInvoiceModalOpen}
+            />
+          )}
+
+          {activeModule === 'eInvoice' && (
+            <EInvoiceModule
+              sales={sales}
+              company={company}
+              eInvoices={eInvoices}
+              language={language}
+              onSaveEInvoice={handleSaveEInvoice}
+              onCancelEInvoice={handleCancelEInvoice}
+              onNavigateToEWayBill={handleNavigateToEWayBill}
+              preselectedInvoiceId={preselectedEInvoiceId}
+            />
+          )}
+
+          {activeModule === 'eWayBill' && (
+            <EWayBillModule
+              sales={sales}
+              company={company}
+              eWayBills={eWayBills}
+              eInvoices={eInvoices}
+              language={language}
+              onSaveEWayBill={handleSaveEWayBill}
+              onUpdatePartB={handleUpdatePartB}
+              onExtendValidity={handleExtendValidity}
+              onCancelEWayBill={handleCancelEWayBill}
+              preselectedInvoiceId={preselectedEWayBillInvoiceId}
+              preselectedIrn={preselectedEWayBillIrn}
             />
           )}
 
@@ -704,8 +998,12 @@ export default function App() {
         language={language}
       />
 
-      {/* Offline Mode Status Banner (PWA Service Worker) */}
-      <OfflineIndicator />
+      {/* Keyboard Shortcuts Cheatsheet Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+        language={language}
+      />
     </div>
   );
 }

@@ -16,6 +16,8 @@ export interface TranslationDictionary {
     bankReconciliation: string;
     ledgers: string;
     reports: string;
+    eInvoice: string;
+    eWayBill: string;
     settings: string;
   };
   common: {
@@ -254,6 +256,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       bankReconciliation: 'Bank Reconciliation',
       ledgers: 'Ledgers & Accounts',
       reports: 'Reports & MIS',
+      eInvoice: 'E-Invoice (IRN)',
+      eWayBill: 'E-Way Bill (EWB)',
       settings: 'Settings & Audit',
     },
     common: {
@@ -490,6 +494,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       bankReconciliation: 'बैंक समाधान (BRS)',
       ledgers: 'खाताबही एवं लेजर',
       reports: 'रिपोर्ट्स व एमआईएस',
+      eInvoice: 'ई-इनवॉयस (IRN)',
+      eWayBill: 'ई-वे बिल (EWB)',
       settings: 'सेटिंग्स व ऑडिट',
     },
     common: {

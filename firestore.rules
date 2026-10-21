@@ -75,6 +75,11 @@ service cloud.firestore {
         allow read, create: if isSignedIn();
         allow update, delete: if false;
       }
+
+      // 9. Active Real-Time User Sessions (Multi-User Presence)
+      match /active_sessions/{sessionId} {
+        allow read, write: if isSignedIn();
+      }
     }
   }
 }
